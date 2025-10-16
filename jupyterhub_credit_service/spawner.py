@@ -130,9 +130,20 @@ class CreditsSpawner(Spawner):
                 raise CreditsException(
                     "No credit values available. Please re-login and try again."
                 )
-            if user_credits.balance < self._billing_value:
+            available_balance = 0
+            proj_credits = user_credits.project
+            if proj_credits:
+                available_balance += proj_credits.balance
+            available_balance += user_credits.balance
+
+            if available_balance < self._billing_value:
+                error_proj_msg = ""
+                error_proj_msg_2 = ""
+                if proj_credits:
+                    error_proj_msg = f"<br>Current project ({proj_credits.name}) credits: {proj_credits.balance} / {proj_credits.cap}."
+                    error_proj_msg_2 = f"<br>Your project ({proj_credits.name}) will receive {proj_credits.grant_value} credits every {proj_credits.grant_interval} seconds."
                 raise CreditsException(
-                    f"Not enough credits to start server '{self._log_name}'.<br>Current credits: {user_credits.balance}/{user_credits.cap}.<br>Required credits: {self._billing_value}.<br>You will receive {user_credits.grant_value} credits every {user_credits.grant_interval} seconds."
+                    f"Not enough credits to start server '{self._log_name}'.<br>Required credits: {self._billing_value}.<br>Current User credits: {user_credits.balance} / {user_credits.cap}.{error_proj_msg}<br>You will receive {user_credits.grant_value} credits every {user_credits.grant_interval} seconds.{error_proj_msg_2}"
                 )
 
         return super().run_pre_spawn_hook()

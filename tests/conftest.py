@@ -45,7 +45,7 @@ from jupyterhub.roles import (
     update_roles,
 )
 from jupyterhub.tests import mocking
-from jupyterhub.tests.mocking import MockHub, MockPAMAuthenticator
+from jupyterhub.tests.mocking import MockHub, MockPAMAuthenticator, MockSpawner
 from jupyterhub.tests.test_services import mockservice_cmd
 from jupyterhub.tests.utils import add_user
 from jupyterhub.utils import random_port
@@ -56,10 +56,17 @@ from tornado.httpclient import HTTPError
 from tornado.platform.asyncio import AsyncIOMainLoop
 
 from jupyterhub_credit_service.authenticator import CreditsAuthenticator
+from jupyterhub_credit_service.spawner import CreditsSpawner
+
+
+class MockCreditsSpawner(MockSpawner, CreditsSpawner):
+    billing_interval = 10
+    billing_value = 10
 
 
 class MockCreditsAuthenticator(MockPAMAuthenticator, CreditsAuthenticator):
     parent = MockHub()
+    credits_task_interval = 1
 
 
 # global db session object
@@ -119,6 +126,7 @@ async def app(request, io_loop, ssl_tmpdir):
 
     mocked_app = MockHub.instance(**kwargs)
     mocked_app.authenticator_class = MockCreditsAuthenticator
+    mocked_app.spawner_class = MockCreditsSpawner
 
     def fin():
         # disconnect logging during cleanup because pytest closes captured FDs prematurely
