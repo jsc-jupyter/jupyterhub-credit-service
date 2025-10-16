@@ -23,9 +23,8 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Javascript dependencies
+      - name: Install nodejs dependencies
         run: |
-          npm install
           npm install -g configurable-http-proxy yarn
           npm list
       - name: Install dependencies
