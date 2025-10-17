@@ -1,0 +1,79 @@
+site_name: JupyterHub Credit Service
+site_description: JupyterHub Credit Service Documentation
+site_author: Tim Kreuzer
+repo_url: https://github.com/jsc-jupyter/jupyterhub-credit-service
+theme:
+  name: material
+  features:
+    - nagivation.tabs
+    - navigation.sections
+    - navigation.collapse
+    - navigation.footer
+    - toc.integrate
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+  language: en
+  logo: images/logo.svg
+  font:
+    text: Fira Sans
+    code: Roboto Mono
+    icon: "mdi"
+  favicon: images/logo.svg
+  # custom_dir: docs/custom
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/lightbulb
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/lightbulb-outline
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Authenticator: authenticator.md
+  - Spawner: spawner.md
+  - API Endpoints: endpoints.md
+  - Contributing: contributing.md
+
+plugins:
+  - social
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - md_in_html
+  - meta
+  - tables
+  - def_list
+  - neoteroi.cards
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.mark
+  - attr_list
+
+extra_css:
+  - css/style.css
+  - css/neoteroi-cards.css
+  - css/extra.css
+
+extra:
+  logo: "images/logo.svg"
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jsc-jupyter/jupyterhub-credit-service
