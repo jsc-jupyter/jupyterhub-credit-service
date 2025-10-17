@@ -706,7 +706,9 @@ async def test_spawner_stopped_when_no_credits_left(db, app, user):
         .filter(ORMUserCredits.name == user.name)
         .first()
     )
-    assert user_credits.balance == user_credits.cap - spawner.billing_value, f"Credits value: {user_credits.balance}"
+    assert (
+        user_credits.balance == user_credits.cap - spawner.billing_value
+    ), f"Credits value: {user_credits.balance}"
 
     # Check if it's running
     status = await spawner.poll()
@@ -720,4 +722,4 @@ async def test_spawner_stopped_when_no_credits_left(db, app, user):
 
     # Check if it's no longer running
     status = await spawner.poll()
-    assert status is 0
+    assert status == 0

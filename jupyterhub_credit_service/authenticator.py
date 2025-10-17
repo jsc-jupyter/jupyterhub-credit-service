@@ -557,7 +557,7 @@ class CreditsAuthenticator(Authenticator):
             if prev_grant_interval != credits_values["grant_interval"]:
                 updated = True
                 orm_user_credits.grant_interval = credits_values["grant_interval"]
-            if  getattr(prev_project, 'name', None) != credits_values["project"]:
+            if getattr(prev_project, "name", None) != credits_values["project"]:
                 updated = True
                 orm_user_credits.project = credits_values["project"]
             if updated:

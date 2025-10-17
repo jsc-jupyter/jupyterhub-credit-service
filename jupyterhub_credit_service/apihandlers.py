@@ -2,10 +2,11 @@ from jupyterhub.apihandlers.base import APIHandler
 from jupyterhub.scopes import needs_scope
 from tornado.web import HTTPError, authenticated
 
-from .orm import UserCredits, ProjectCredits
+from .orm import ProjectCredits, UserCredits
 
 background_task = None
 import json
+
 
 class CreditsAPIHandler(APIHandler):
     @authenticated
@@ -101,6 +102,7 @@ class CreditsUserAPIHandler(APIHandler):
         user.authenticator.db_session.add(credits)
         user.authenticator.db_session.commit()
         self.set_status(200)
+
 
 class CreditsProjectAPIHandler(APIHandler):
     @needs_scope("admin:users")

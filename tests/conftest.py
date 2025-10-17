@@ -55,8 +55,7 @@ from sqlalchemy import event
 from tornado.httpclient import HTTPError
 from tornado.platform.asyncio import AsyncIOMainLoop
 
-from jupyterhub_credit_service import CreditsAuthenticator
-from jupyterhub_credit_service import CreditsSpawner
+from jupyterhub_credit_service import CreditsAuthenticator, CreditsSpawner
 
 
 class MockCreditsSpawner(MockSpawner, CreditsSpawner):
