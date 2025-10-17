@@ -39,7 +39,6 @@ nav:
   - Authenticator: authenticator.md
   - Spawner: spawner.md
   - API Endpoints: endpoints.md
-  - Contributing: contributing.md
 
 plugins:
   - social

@@ -6,7 +6,27 @@ It enables administrators to control how long users can use computational enviro
 
 ---
 
-## Example
+## Overview
+
+In vanilla JupyterHub deployments administrators can limit the amount of servers a user can spawn with `c.JupyterHub.named_server_limit_per_user`. This does not take into account what `user_options` a user has chosen.  
+The **JupyterHub Credit Service** offers a detailed **per-user** configuration, depending on the chosen **Spawner configurations**, with a **credit-based quota system**:
+
+- Each **user** has a personal maximum amount of credits.
+- Each **user** gains new credits every `n` seconds.  
+- Each **server** consumes credits over time based on its configuration.  
+- **Projects** can share credits among their members to support community based access restrictions.
+
+---
+
+## Installation
+
+```bash
+pip install jupyterhub-credit-service
+```
+
+---
+
+## Usage
 
 Example `jupyterhub_config.py` configuration:  
 ```jupyterhub_config.py
@@ -52,27 +72,3 @@ c.JupyterHub.spawner_class = KubeSpawner
 c.KubeSpawner.billing_value = get_billing_value # may be a callable or integer
 c.KubeSpawner.billing_interval = 600 # Pay credits depending on gpus usage every 10 minutes, may be a callable or integer
 ```
-
-
-## Overview
-
-In vanilla JupyterHub deployments administrators can limit the amount of servers a user can spawn with `c.JupyterHub.named_server_limit_per_user`. This does not take into account what `user_options` a user has chosen.  
-The **JupyterHub Credit Service** offers a detailed **per-user** configuration, depending on the chosen **Spawner configurations**, with a **credit-based quota system**:
-
-- Each **user** has a personal maximum amount of credits.
-- Each **user** gains new credits every `n` seconds.  
-- Each **server** consumes credits over time based on its configuration.  
-- **Projects** can share credits among their members to support community based access restrictions.
-
----
-
-
-## Installation
-
-```bash
-pip install jupyterhub-credit-service
-```
-
-## Configuration
-
-Checkout [Authenticator](./authenticator.md) and [Spawner](./spawner.md) for all configurations.
