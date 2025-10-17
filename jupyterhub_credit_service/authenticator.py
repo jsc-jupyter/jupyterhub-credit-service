@@ -143,7 +143,7 @@ class CreditsAuthenticator(Authenticator):
 
             c.CreditsAuthenticator.credits_user_project = credits_user_project
         
-        Default: 600 seconds
+        Default: None
         """,
     ).tag(config=True)
 
