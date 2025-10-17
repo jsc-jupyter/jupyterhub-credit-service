@@ -77,8 +77,26 @@ c.CreditsAuthenticator.credits_user_project = credits_user_project # Must be a c
 
 ```
 
-### Other Configurations
+## Other Configurations
 
- - **credits_enabled**: Enable/Disable the credit feature entirely. Default: true
- - **credits_task_interval**: Interval, in seconds, at which the background credit task runs. Default: 60
- - **credits_task_post_hook**: Optional function, called after each **billing interval**. Default: None
+- **credits_enabled**: Enables or disables the credit system entirely.  
+  *Default: true*
+
+- **credits_task_interval**: Defines the interval, in seconds, at which the background credit management task executes.  
+  *Default: 60*
+
+- **credits_task_post_hook**: An optional callback function executed after each **billing interval**.  
+  *Default: None*
+
+
+## Implementation / Credit Logic
+
+The main process driving the system is the `Authenticator.credit_reconciliation_task()` function.  
+This background task runs every `Authenticator.credits_task_interval` seconds and performs the following actions:
+
+- **Add Project Credits** based on project-specific configuration values.  
+- **Add User Credits** based on user-specific configuration values.  
+- **Deduct Project/User Credits** for active servers, according to their spawner-specific billing rules.
+
+Whenever `Authenticator.add_user` (triggered for users not yet registered in JupyterHub) or `Authenticator.run_post_auth_hook` (typically called during login or authentication refresh) is executed, the user’s configuration is updated.  
+This mechanism ensures that administrators can modify and apply configuration updates for existing users seamlessly.
