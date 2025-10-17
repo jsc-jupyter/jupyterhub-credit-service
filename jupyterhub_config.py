@@ -27,9 +27,21 @@ def user_cap(user_name, user_groups, is_admin):
         return 150
     return 100
 
+available_projects = [{
+    "name": "defaultproj",
+    "cap": 500,
+    "grant_interval": 60,
+    "grant_value": 50
+}]
+
+def user_project(user_name, *args):
+    return "defaultproj"
 
 c.DummyCreditsAuthenticator.admin_users = ["admin"]
 c.DummyCreditsAuthenticator.credits_user_cap = user_cap
+c.DummyCreditsAuthenticator.credits_available_projects = available_projects
+c.DummyCreditsAuthenticator.credits_user_project = user_project
+
 # c.DummyCreditsAuthenticator.credits_task_interval = 10
 # c.DummyCreditsAuthenticator.credits_user_grant_interval = 60
 # c.DummyCreditsAuthenticator.credits_user_grant_value = 10
