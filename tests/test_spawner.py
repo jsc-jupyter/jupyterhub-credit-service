@@ -30,8 +30,6 @@ def get_projects(proj_name):
 
 @pytest.mark.asyncio
 async def test_spawner_first_bill(db, app, user):
-    # In this test we're starting a Spawner with costs of 10 credits every 10 seconds.
-    # Let's see if it was billed 10 credits even if it's not running for 10 seconds (first bill validation)
     call_counter = []
     event = asyncio.Event()
 
@@ -80,8 +78,6 @@ async def test_spawner_first_bill(db, app, user):
 
 
 async def test_spawner_stopped_labs_not_billed(db, app, user):
-    # In this test we're starting a Spawner with costs of 10 credits every 10 seconds.
-    # Let's see if it was billed 10 credits even if it's not running for 10 seconds (first bill validation)
     call_counter = []
     event = asyncio.Event()
 
@@ -368,8 +364,6 @@ async def test_spawner_proj_billed_partly(db, app, user):
 
 
 async def test_spawner_proj_billed_start_stop_start(db, app, user):
-    # In this test we're starting a Spawner with costs of 10 credits every 10 seconds.
-    # Test if it was billed twice after 10-20 seconds
     call_counter = []
     event = asyncio.Event()
 
@@ -672,3 +666,58 @@ async def test_spawner_proj_costs_more_than_usercredit(db, app, user):
     await user.stop()
     status = await spawner.poll()
     assert status == 0
+
+
+async def test_spawner_stopped_when_no_credits_left(db, app, user):
+    call_counter = []
+    event = asyncio.Event()
+
+    async def post_hook():
+        call_counter.append(1)
+        event.set()
+
+    app.authenticator.credits_task_post_hook = post_hook
+    app.authenticator.credits_task_interval = 10
+
+    await app.login_user(user.name)
+    user_credits = (
+        app.authenticator.db_session.query(ORMUserCredits)
+        .filter(ORMUserCredits.name == user.name)
+        .first()
+    )
+    assert user_credits.cap == 100
+    assert user_credits.balance == 100
+    spawner = user.spawner
+    spawner.billing_value = 80
+    spawner.billing_interval = 8
+    spawner.cmd = ["jupyterhub-singleuser"]
+    await user.spawn()
+    assert spawner.server.ip == "127.0.0.1"
+    assert spawner.server.port > 0
+    await wait_for_spawner(spawner)
+
+    # Now the spawner is running. Let's clear the event and wait for another billing run
+    event.clear()
+    call_counter = []
+    await event.wait()
+
+    user_credits = (
+        app.authenticator.db_session.query(ORMUserCredits)
+        .filter(ORMUserCredits.name == user.name)
+        .first()
+    )
+    assert user_credits.balance == user_credits.cap - spawner.billing_value, f"Credits value: {user_credits.balance}"
+
+    # Check if it's running
+    status = await spawner.poll()
+    assert status is None
+
+    # Wait for next two billing runs.
+    event.clear()
+    await event.wait()
+    event.clear()
+    await event.wait()
+
+    # Check if it's no longer running
+    status = await spawner.poll()
+    assert status is 0
