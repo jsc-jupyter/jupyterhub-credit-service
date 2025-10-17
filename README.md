@@ -1,6 +1,6 @@
 # JupyterHub Credit Service
 
-[![Documentation](https://img.shields.io/badge/docs-MkDocs-blue)](https://jsc-jupyter.github.io/jupyterhub-credit-service/)
+[![Documentation](https://img.shields.io/badge/Documentation-passed-green)](https://jsc-jupyter.github.io/jupyterhub-credit-service/)
 [![PyPI Test Action](https://github.com/jsc-jupyter/jupyterhub-credit-service/actions/workflows/pytest.yml/badge.svg?branch=main)](https://github.com/jsc-jupyter/jupyterhub-credit-service/actions/workflows/pytest.yml)
 [![PyPI](https://img.shields.io/pypi/v/jupyterhub-credit-service)](https://pypi.org/project/jupyterhub-credit-service/)
 
