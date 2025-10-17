@@ -19,7 +19,7 @@ class CreditsException(web.HTTPError):
 class CreditsSpawner(Spawner):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.user.authenticator.append_user(self.user)
+        self.user.authenticator.credits_append_user(self.user)
 
     _billing_interval = None
     billing_interval = Any(

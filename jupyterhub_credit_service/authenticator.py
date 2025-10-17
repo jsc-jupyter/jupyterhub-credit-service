@@ -18,7 +18,7 @@ from .orm import UserCredits as ORMUserCredits
 class CreditsAuthenticator(Authenticator):
     credits_task = None
     db_session = None
-    user_dict = {}
+    user_credits_dict = {}
 
     credits_enabled = Bool(
         default_value=os.environ.get("JUPYTERHUB_CREDITS_ENABLED", "1").lower()
@@ -302,7 +302,7 @@ class CreditsAuthenticator(Authenticator):
                             self.db_session.commit()
                         available_balance += credits.balance
 
-                        mem_user = self.user_dict.get(credits.name, None)
+                        mem_user = self.user_credits_dict.get(credits.name, None)
                         if mem_user:
                             to_stop = []
                             for spawner in mem_user.spawners.values():
@@ -424,9 +424,9 @@ class CreditsAuthenticator(Authenticator):
                 self.log.debug(f"Credit task took {tac}s to update all user credits")
                 await asyncio.sleep(self.credits_task_interval)
 
-    def append_user(self, user):
-        if user.name not in self.user_dict.keys():
-            self.user_dict[user.name] = user
+    def credits_append_user(self, user):
+        if user.name not in self.user_credits_dict.keys():
+            self.user_credits_dict[user.name] = user
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
