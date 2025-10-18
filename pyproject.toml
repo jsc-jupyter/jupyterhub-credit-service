@@ -76,6 +76,9 @@ remove-unused-variables = true
 [tool.isort]
 profile = "black"
 
+[tool.hatch.build.targets.wheel.force-include]
+"templates/page.html" = "jupyterhub_credit_service/templates/page.html"
+
 
 # pytest is used for running Python based tests
 #

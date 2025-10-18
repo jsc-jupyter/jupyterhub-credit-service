@@ -19,6 +19,7 @@ class CreditsAuthenticator(Authenticator):
     credits_task = None
     db_session = None
     user_credits_dict = {}
+    user_credits_sse_event = asyncio.Event()
 
     credits_enabled = Bool(
         default_value=os.environ.get("JUPYTERHUB_CREDITS_ENABLED", "1").lower()
@@ -420,6 +421,7 @@ class CreditsAuthenticator(Authenticator):
                     await self.run_credits_task_post_hook()
                 except:
                     self.log.exception("Exception in credits_task_post_hook")
+                self.user_credits_sse_event.set()
                 tac = time.time() - tic
                 self.log.debug(f"Credit task took {tac}s to update all user credits")
                 await asyncio.sleep(self.credits_task_interval)
@@ -527,9 +529,14 @@ class CreditsAuthenticator(Authenticator):
         }
         if user_project_name:
             orm_user_project = ORMProjectCredits.get_project(
-                self.db_session, project_name=user_project_name
+                self.db_session, user_project_name
             )
-            credits_values["project"] = orm_user_project
+            if orm_user_project:
+                credits_values["project"] = orm_user_project
+            else:
+                self.log.warning(
+                    f"Configured project ({user_project_name}) for {orm_user.name} not in Authenticator.available_projects"
+                )
 
         # Add / Update ORMUserCredits entry
         orm_user_credits = ORMUserCredits.get_user(self.db_session, orm_user.name)

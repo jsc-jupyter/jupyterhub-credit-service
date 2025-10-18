@@ -110,8 +110,15 @@ class CreditsSpawner(Spawner):
     def clear_state(self):
         super().clear_state()
 
+    async def progress(self):
+        yield {
+            "progress": 50,
+            "message": f"Spawning server for {self._billing_value} credits per {self._billing_interval} seconds...",
+        }
+
     async def run_pre_spawn_hook(self):
         if self.user.authenticator.credits_enabled:
+            await self.user.authenticator.update_user_credit(self.user.orm_user)
 
             async def resolve_value(value):
                 if callable(value):

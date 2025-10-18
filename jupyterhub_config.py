@@ -1,10 +1,27 @@
 c = get_config()  # noqa
 
+import traceback
+
 from jupyterhub.auth import DummyAuthenticator
 from jupyterhub.spawner import SimpleLocalProcessSpawner
 
 from jupyterhub_credit_service.authenticator import CreditsAuthenticator
 from jupyterhub_credit_service.spawner import CreditsSpawner
+
+try:
+    # Use templates to show UserCredits on JHub Website
+    import sysconfig
+    from pathlib import Path
+
+    site_packages = Path(sysconfig.get_paths()["purelib"])
+    jh_templates = site_packages / "jupyterhub_credit_service" / "templates"
+    if jh_templates.is_dir():
+        c.JupyterHub.template_paths = [str(jh_templates)]
+    else:
+        print(f"Template directory not found: {jh_templates}")
+except:
+    print("Could not load JupyterHub Credit Service Templates")
+    traceback.print_exc()
 
 
 class SimpleLocalProcessCreditsSpawner(SimpleLocalProcessSpawner, CreditsSpawner):
@@ -27,24 +44,26 @@ def user_cap(user_name, user_groups, is_admin):
         return 150
     return 100
 
-available_projects = [{
-    "name": "defaultproj",
-    "cap": 500,
-    "grant_interval": 60,
-    "grant_value": 50
-}]
+
+available_projects = [
+    {"name": "Project1", "cap": 500, "grant_interval": 60, "grant_value": 50}
+]
+
 
 def user_project(user_name, *args):
-    return "defaultproj"
+    return "Project1"
+
 
 c.DummyCreditsAuthenticator.admin_users = ["admin"]
 c.DummyCreditsAuthenticator.credits_user_cap = user_cap
 c.DummyCreditsAuthenticator.credits_available_projects = available_projects
 c.DummyCreditsAuthenticator.credits_user_project = user_project
 
+c.DummyCreditsAuthenticator.credits_task_interval = 5
+
 # c.DummyCreditsAuthenticator.credits_task_interval = 10
-# c.DummyCreditsAuthenticator.credits_user_grant_interval = 60
-# c.DummyCreditsAuthenticator.credits_user_grant_value = 10
+c.DummyCreditsAuthenticator.credits_user_grant_interval = 60
+c.DummyCreditsAuthenticator.credits_user_grant_value = 30
 
 
 def get_billing_value(spawner):
@@ -54,7 +73,7 @@ def get_billing_value(spawner):
 
 
 c.SimpleLocalProcessCreditsSpawner.billing_value = get_billing_value
-# c.SimpleLocalProcessCreditsSpawner.billing_interval = 10
+c.SimpleLocalProcessCreditsSpawner.billing_interval = 10
 c.SimpleLocalProcessCreditsSpawner.cmd = [
     "/opt/miniforge3/envs/jupyterhub-credit-service/bin/jupyterhub-singleuser"
 ]
