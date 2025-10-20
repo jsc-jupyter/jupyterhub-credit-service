@@ -52,5 +52,5 @@ This ensures that users cannot exceed their allocated credit limits and provides
 The CreditsSpawner shows the required credits and billing interval when starting the Jupyter Server.
 
 <div style="text-align: center;">
-  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_spawn.png" alt="JupyterHub Spawner" style="width: 70%;">
+  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_spawn.png" alt="JupyterHub Spawner" style="width: 100%;">
 </div>

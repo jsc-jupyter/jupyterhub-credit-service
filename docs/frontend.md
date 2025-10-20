@@ -12,7 +12,7 @@ This configuration automatically inserts the user's credit balance into the Jupy
 Whenever credits are updated on the server, the displayed balance updates in real time - no manual page refresh required.
 
 <div style="text-align: center;">
-  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_home.png" alt="JupyterHub" style="width: 70%;">
+  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_home.png" alt="JupyterHub" style="width: 100%;">
 </div>
 
 <summary>Click here to see the frontend changes of JupyterHub<details>
