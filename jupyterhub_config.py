@@ -1,27 +1,15 @@
 c = get_config()  # noqa
 
-import traceback
 
 from jupyterhub.auth import DummyAuthenticator
 from jupyterhub.spawner import SimpleLocalProcessSpawner
 
+from jupyterhub_credit_service import template_paths
 from jupyterhub_credit_service.authenticator import CreditsAuthenticator
 from jupyterhub_credit_service.spawner import CreditsSpawner
 
-try:
-    # Use templates to show UserCredits on JHub Website
-    import sysconfig
-    from pathlib import Path
-
-    site_packages = Path(sysconfig.get_paths()["purelib"])
-    jh_templates = site_packages / "jupyterhub_credit_service" / "templates"
-    if jh_templates.is_dir():
-        c.JupyterHub.template_paths = [str(jh_templates)]
-    else:
-        print(f"Template directory not found: {jh_templates}")
-except:
-    print("Could not load JupyterHub Credit Service Templates")
-    traceback.print_exc()
+# Show current User Credits in Frontend
+c.JupyterHub.template_paths = template_paths
 
 
 class SimpleLocalProcessCreditsSpawner(SimpleLocalProcessSpawner, CreditsSpawner):
