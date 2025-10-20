@@ -76,4 +76,7 @@ def get_billing_value(spawner):
 c.JupyterHub.spawner_class = KubeSpawner
 c.KubeSpawner.billing_value = get_billing_value # may be a callable or integer
 c.KubeSpawner.billing_interval = 600 # Pay credits depending on gpus usage every 10 minutes, may be a callable or integer
+
+# Show JupyterHub Credits in the Header in your frontend
+c.JupyterHub.template_paths = jupyterhub_credit_service.template_paths
 ```
