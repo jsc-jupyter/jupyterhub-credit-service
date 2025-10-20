@@ -4,6 +4,10 @@ The **JupyterHub Credit Service** is a python package that can be installed as a
 
 It enables administrators to control how long users can use computational environments, and how shared project resources are allocated — all without complex accounting or billing systems.
 
+<div style="text-align: center;">
+  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_home.png" alt="JupyterHub" style="width: 70%;">
+</div>
+
 ---
 
 ## Overview
@@ -71,4 +75,9 @@ def get_billing_value(spawner):
 c.JupyterHub.spawner_class = KubeSpawner
 c.KubeSpawner.billing_value = get_billing_value # may be a callable or integer
 c.KubeSpawner.billing_interval = 600 # Pay credits depending on gpus usage every 10 minutes, may be a callable or integer
+
+
+# Show JupyterHub Credits in the Header in your frontend
+c.JupyterHub.template_paths = jupyterhub_credit_service.template_paths
+
 ```

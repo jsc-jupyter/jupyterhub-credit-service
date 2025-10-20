@@ -38,6 +38,7 @@ nav:
   - Home: index.md
   - Authenticator: authenticator.md
   - Spawner: spawner.md
+  - Frontend: frontend.md
   - API Endpoints: endpoints.md
 
 plugins:

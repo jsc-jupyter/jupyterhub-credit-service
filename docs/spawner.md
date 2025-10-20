@@ -47,3 +47,10 @@ Before the server starts, the system verifies whether the user (or their associa
 If the available credits are insufficient, a `CreditsException` is raised, preventing the server from launching and displaying a clear, informative error message to the user.  
 This ensures that users cannot exceed their allocated credit limits and provides immediate feedback when resources cannot be started due to credit constraints.
 
+## User information
+
+The CreditsSpawner shows the required credits and billing interval when starting the Jupyter Server.
+
+<div style="text-align: center;">
+  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_spawn.png" alt="JupyterHub Spawner" style="width: 70%;">
+</div>
