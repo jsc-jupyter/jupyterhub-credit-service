@@ -4,8 +4,8 @@ The **JupyterHub Credit Service** integrates smoothly with the standard JupyterH
 If you're using a customized JupyterHub frontend, you can easily include the same functionality. Just check out the changes shown below.
 
 ```python
-from jupyterhub_credit_service import template_paths
-c.JupyterHub.template_paths = template_paths
+from jupyterhub_credit_service import template_path
+c.JupyterHub.template_paths = template_path
 ```
 
 This configuration automatically inserts the user's credit balance into the JupyterHub header.

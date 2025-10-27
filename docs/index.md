@@ -78,6 +78,6 @@ c.KubeSpawner.billing_interval = 600 # Pay credits depending on gpus usage every
 
 
 # Show JupyterHub Credits in the Header in your frontend
-c.JupyterHub.template_paths = jupyterhub_credit_service.template_paths
+c.JupyterHub.template_paths = jupyterhub_credit_service.template_path
 
 ```
