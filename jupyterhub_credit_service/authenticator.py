@@ -1,6 +1,8 @@
 import asyncio
 import inspect
+import fnmatch
 import os
+import re
 import time
 from datetime import datetime, timedelta
 
@@ -10,16 +12,14 @@ from jupyterhub.orm import User as ORMUser
 from jupyterhub.utils import utcnow
 from traitlets import Any, Bool, Callable, Dict, Integer, List, Union
 
-from .orm import Base
-from .orm import ProjectCredits as ORMProjectCredits
-from .orm import UserCredits as ORMUserCredits
+from .orm import Base, CreditsUser, CreditsUserValues, CreditsProject
 
 
 class CreditsAuthenticator(Authenticator):
     credits_task = None
     db_session = None
     user_credits_dict = {}
-    user_credits_sse_event = asyncio.Event()
+    credits_task_event = None
 
     credits_enabled = Bool(
         default_value=os.environ.get("JUPYTERHUB_CREDITS_ENABLED", "1").lower()
@@ -46,154 +46,91 @@ class CreditsAuthenticator(Authenticator):
         """,
     ).tag(config=True)
 
-    credits_user_cap = Any(
-        default_value=int(os.environ.get("JUPYTERHUB_CREDITS_USER_CAP", "100")),
-        help="""
-        Maximum credit balance for all users.
-
-        This value can be:
-        - An integer (applies to all users)
-        - A function returning an integer (per-user logic)
-        - A coroutine returning an integer (per-user logic)
-
-        This may be a coroutine.
-
-        Example::
-
-            def user_cap(user_name, user_groups, is_admin):
-                if user_name == "max":
-                    return 150
-                return 100
-
-            c.CreditsAuthenticator.credits_user_cap = user_cap
-        
-        Default: 100 credits
-        """,
-    ).tag(config=True)
-
-    credits_user_grant_value = Any(
-        default_value=int(os.environ.get("JUPYTERHUB_CREDITS_USER_GRANT_VALUE", "10")),
-        help="""
-        Number of credits granted to a user every
-        `c.CreditsAuthenticator.user_grant_interval` seconds.
-
-        This value can be:
-        - An integer (applies to all users)
-        - A function returning an integer (per-user logic)
-        - A coroutine returning an integer (per-user logic)
-
-        This may be a coroutine.
-
-        Example::
-
-            def user_grant_value(user_name, user_groups, is_admin):
-                if is_admin:
-                    return 20
-                return 10
-
-            c.CreditsAuthenticator.credits_user_grant_value = user_grant_value
-        
-        Default: 10 credits
-        """,
-    ).tag(config=True)
-
-    credits_user_grant_interval = Any(
-        default_value=int(
-            os.environ.get("JUPYTERHUB_CREDITS_USER_GRANT_INTERVAL", "600")
-        ),
-        help="""
-        Interval, in seconds, for granting
-        `c.CreditsAuthenticator.user_grant_value` credits to users.
-
-        This value can be:
-        - An integer (applies to all users)
-        - A function returning an integer (per-user logic)
-        - A coroutine returning an integer (per-user logic)
-
-        This may be a coroutine.
-
-        Example::
-
-            def user_grant_interval(user_name, user_groups, is_admin):
-                if "premium" in user_groups:
-                    return 300  # grant every 5 minute
-                return 600  # default 10 minutes
-
-            c.CreditsAuthenticator.credits_user_grant_interval = user_grant_interval
-        
-        Default: 600 seconds
-        """,
-    ).tag(config=True)
-
-    credits_user_project = Callable(
+    credits_user = Union(
+        [Dict(), List(), Callable()],
         default_value=None,
-        allow_none=True,
         help="""
-        Callable to define a name of a project a user
-        is part of. The project must be configured via
-        `c.CreditsAuthenticator.credits_available_projects`.
-
-        This may be a coroutine.
-
-        Example::
-
-            def credits_user_project(user_name, user_groups, is_admin):
-                if "community1" in user_groups:
-                    return "community1"
-                return None
-
-            c.CreditsAuthenticator.credits_user_project = credits_user_project
+        Configuration dictionaries for user credits.
         
-        Default: None
-        """,
-    ).tag(config=True)
-
-    credits_available_projects = Union(
-        [List(Dict()), Callable()],
-        default_value=[],
-        help="""
-        Define a list of available projects a user can be part of. 
-        The required structure for one project is:
-            {
-                "name": "my_project",
-                "cap": 500,
+        Each configuration must include the following keys:
+        - name: A unique identifier. Required to remove previously granted credit configurations from a user.
+        - cap: Maximum credit balance for the user. (Has to be an Integer)
+        - grant_value: Number of credits granted to the user every grant_interval seconds. (Has to be an Integer)
+        - grant_interval: Interval, in seconds, for granting credits to the user. (Has to be an Integer)
+        - project: (optional) Name of the project the user is part of. (Has to be a String or None, if defined)
+        - user_options: (optional) User Options. If a spawner object uses all configured user_options use this config is used.
+        
+        If configured as a list, the first match will have to pay for a server. If a fallback should be used, configure it without
+        user_options as last dict in the return list
+        
+        This may be a coroutine.
+        
+        
+        Example::
+            same_user_credit_values_for_all_users = {
+                "name": "default",
+                "cap": 100,
                 "grant_value": 10,
-                "grant_interval": 300
+                "grant_interval": 600,
+                "project": None,
             }
 
-        For a user to join a project configure credits_user_project.
-        Each user can only join maximum one project.
+            async def credits_user_values_based_on_user_options(user_name, user_groups, is_admin):
+                # When a User uses system A, he is forced to use the first credits group.
+                # All other spawner configuration (where spawner.user_options["system"] != A) use
+                # the generic credit configuration with cap=100.
+                ret = [
+                    {
+                        "name": "system_a_credit",
+                        "cap": 20,
+                        "grant_value": 5,
+                        "grant_interval": 600,
+                        "project": None,
+                        "user_options": {
+                            "system": "A"
+                        }
+                    },
+                    {
+                        "name": "default",
+                        "cap": 100,
+                        "grant_value": 10,
+                        "grant_interval": 600,
+                        "project": None,
+                    }
+                ]
+                return ret
 
-        If the user is part of a project, the project's credits take precedence.
-        This means that as long as the project has available credits, they will be
-        used first. The user's personal credits are only used if the project
-        has no credits left.
-
-        If it is configured as a Callable, it will be updated at every user login.
-        This allows you to use an external source and manage projects without restarting
-        JupyterHub.
-
-        May be a coroutine.
-
-        Example::
-
-            async def available_projects():
-                return [{
-                    "name": "community1",
-                    "cap": 1000,
-                    "grant_value": 20,
-                    "grant_interval": 600,
-                },
-                {
-                    "name": "community2",
-                    "cap": 500,
+            async def credits_user_values(user_name, user_groups, is_admin, auth_model):
+                ret = {
+                    "name": "default",
+                    "cap": 100,
                     "grant_value": 10,
                     "grant_interval": 600,
-                }]
+                    "project": None,
+                }
+                if is_admin:
+                    ret["project"] = {
+                        "name": "admin",
+                        "cap": 1000,
+                        "grant_value": 100,
+                        "grant_interval": 300
+                    }
+                elif "community1" in user_groups:
+                    ret["project"] = {
+                        "name": "community1",
+                        "cap": 100,
+                        "grant_value": 10,
+                        "grant_interval": 300
+                    }
+                
+                return ret
 
-            c.CreditsAuthenticator.credits_available_projects = available_projects
-
-        Default: []
+            c.CreditsAuthenticator.credits_user_values = credits_user_values
+            # c.CreditsAuthenticator.credits_user_values = credits_user_values_based_on_user_options
+        
+        
+        Default: None
+          
         """,
     ).tag(config=True)
 
@@ -218,202 +155,324 @@ class CreditsAuthenticator(Authenticator):
 
     async def run_credits_task_post_hook(self):
         if self.credits_task_post_hook:
+            self.log.info("Running credits_task_post_hook")
             f = self.credits_task_post_hook()
             if inspect.isawaitable(f):
+                self.log.info("Awaiting credits_task_post_hook")
                 await f
+            self.log.info("Finished credits_task_post_hook")
+
+
+    def credits_validate_and_update_project(self, _project):
+        if not _project.get("name", None):
+            self.log.warning(
+                "Credits Project requires a 'name'. Fix required for Authenticator.credits_available_projects. Skip project"
+            )
+            return False
+        project_name = _project["name"]
+        if "cap" not in _project.keys():
+            self.log.warning(
+                f"Credits Project requires a 'cap'. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
+            )
+            return False
+        if "grant_value" not in _project.keys():
+            self.log.warning(
+                f"Credits Project requires a 'grant_value'. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
+            )
+            return False
+        if "grant_interval" not in _project.keys():
+            self.log.warning(
+                f"Credits Project requires a 'grant_interval'. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
+            )
+            return False
+        if type(_project.get("user_options", {})) != dict:
+            self.log.warning(
+                f"Credits Project 'user_options' must be a dict. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
+            )
+            return False
+        if "display_name" not in _project.keys():
+            _project["display_name"] = project_name
+        return _project
+
+    def match_user_options(self, user_options_spawner, user_options_configured):
+        if not user_options_configured:
+            return True
+        for key, value in user_options_configured.items():
+            uo_value = user_options_spawner[key]
+            if type(uo_value) == list and len(uo_value) == 1:
+                uo_value = uo_value[0]
+            if key not in user_options_spawner.keys():
+                self.log.debug(
+                    f"Key {key} not found in spawner user_options {user_options_spawner}. Return False."
+                )
+                return False
+            if type(value) == list:
+                self.log.debug(
+                    f"Check if spawner user_option {key} value {uo_value} is in configured list {value}"
+                )
+                if uo_value not in value:
+                    return False
+            elif type(value) == str:
+                self.log.debug(
+                    f"Check if spawner user_option {key} value {uo_value} matches regex pattern {value}"
+                )
+                try:
+                    if re.fullmatch(value, str(uo_value)) is None:
+                        self.log.debug(f"Pattern {value} does not match value {uo_value}.")
+                        return False
+                except re.error:
+                    try:
+                        if re.fullmatch(fnmatch.translate(value), str(uo_value)) is None:
+                            self.log.debug(f"Pattern {value} does not match value {uo_value}.")
+                            return False
+                    except re.error:
+                        self.log.warning(f"Invalid regex pattern {value} for user_option {key}. Check if strings are equal.")
+                        if uo_value != value:
+                            return False  
+            elif type(value) in [int, float, bool]:
+                self.log.debug(
+                    f"Check if spawner user_option {key} value {uo_value} equals configured value {value}"
+                )
+                if uo_value != value:
+                    return False
+            elif type(value) == dict:
+                self.log.debug(
+                    f"Check if spawner user_option {key} value {uo_value} matches configured dict {value}"
+                )
+                if not self.match_user_options(uo_value, value):
+                    return False
+            else:
+                self.log.debug(
+                    f"Unsupported type {type(value)} for user_option {key}. Check if strings are equal."
+                )
+                if str(uo_value) != str(value):
+                    return False
+        return True
 
     async def credit_reconciliation_task(self):
         while True:
             try:
                 tic = time.time()
                 now = utcnow(with_tz=False)
-                all_user_credits = self.db_session.query(ORMUserCredits).all()
-
-                for credits in all_user_credits:
-                    try:
-                        available_balance = 0
-
-                        if credits.project:
-                            proj_prev_balance = credits.project.balance
-                            proj_cap = credits.project.cap
-                            proj_updated = False
-                            if proj_prev_balance == proj_cap:
-                                credits.project.grant_last_update = now
-                                proj_updated = True
-                            elif proj_prev_balance > proj_cap:
-                                credits.project.grant_last_update = now
-                                credits.project.balance = proj_cap
-                                proj_updated = True
-                            else:
-                                elapsed = (
-                                    now - credits.project.grant_last_update
-                                ).total_seconds()
-                                if elapsed > credits.project.grant_interval:
+                all_credit_users = self.db_session.query(CreditsUser).all()
+                for credit_user in all_credit_users:
+                    for credits in credit_user.credits_user_values:
+                        try:
+                            if credits.project:
+                                proj_prev_balance = credits.project.balance
+                                proj_cap = credits.project.cap
+                                proj_updated = False
+                                if proj_prev_balance == proj_cap:
+                                    credits.project.grant_last_update = now
                                     proj_updated = True
-                                    grants = int(
-                                        elapsed // credits.project.grant_interval
-                                    )
-                                    gained = grants * credits.project.grant_value
-                                    credits.project.balance = min(
-                                        proj_prev_balance + gained, proj_cap
-                                    )
-                                    credits.project.grant_last_update += timedelta(
-                                        seconds=grants * credits.project.grant_interval
+                                elif proj_prev_balance > proj_cap:
+                                    credits.project.grant_last_update = now
+                                    credits.project.balance = proj_cap
+                                    proj_updated = True
+                                else:
+                                    elapsed = (
+                                        now - credits.project.grant_last_update
+                                    ).total_seconds()
+                                    if elapsed > credits.project.grant_interval:
+                                        proj_updated = True
+                                        grants = int(
+                                            elapsed // credits.project.grant_interval
+                                        )
+                                        gained = grants * credits.project.grant_value
+                                        credits.project.balance = min(
+                                            proj_prev_balance + gained, proj_cap
+                                        )
+                                        credits.project.grant_last_update += timedelta(
+                                            seconds=grants * credits.project.grant_interval
+                                        )
+                                        self.log.debug(
+                                            f"Project {credits.project_name}: {proj_prev_balance} -> {credits.project.balance} "
+                                            f"(+{gained}, cap {credits.project.cap})",
+                                            extra={
+                                                "action": "creditsgained",
+                                                "projectname": credits.project_name,
+                                            },
+                                        )
+                                if proj_updated:
+                                    self.db_session.commit()
+                            prev_balance = credits.balance
+                            cap = credits.cap
+                            updated = False
+                            if prev_balance == cap:
+                                credits.grant_last_update = now
+                                updated = True
+                            elif prev_balance > cap:
+                                credits.grant_last_update = now
+                                credits.balance = cap
+                                updated = True
+                            else:
+                                elapsed = (now - credits.grant_last_update).total_seconds()
+                                if elapsed >= credits.grant_interval:
+                                    updated = True
+                                    grants = int(elapsed // credits.grant_interval)
+                                    gained = grants * credits.grant_value
+                                    credits.balance = min(prev_balance + gained, cap)
+                                    credits.grant_last_update += timedelta(
+                                        seconds=grants * credits.grant_interval
                                     )
                                     self.log.debug(
-                                        f"Project {credits.project_name}: {proj_prev_balance} -> {credits.project.balance} "
-                                        f"(+{gained}, cap {credits.project.cap})",
+                                        f"User {credit_user.name} ({credits.name}): {prev_balance} -> {credits.balance} "
+                                        f"(+{gained}, cap {credits.cap})",
                                         extra={
                                             "action": "creditsgained",
-                                            "projectname": credits.project_name,
+                                            "username": credit_user.name,
+                                            "creditsname": credits.name,
                                         },
                                     )
-                            if proj_updated:
+                            if updated:
                                 self.db_session.commit()
-                            available_balance += credits.project.balance
-                        prev_balance = credits.balance
-                        cap = credits.cap
-                        updated = False
-                        if prev_balance == cap:
-                            credits.grant_last_update = now
-                            updated = True
-                        elif prev_balance > cap:
-                            credits.grant_last_update = now
-                            credits.balance = cap
-                            updated = True
-                        else:
-                            elapsed = (now - credits.grant_last_update).total_seconds()
-                            if elapsed >= credits.grant_interval:
-                                updated = True
-                                grants = int(elapsed // credits.grant_interval)
-                                gained = grants * credits.grant_value
-                                credits.balance = min(prev_balance + gained, cap)
-                                credits.grant_last_update += timedelta(
-                                    seconds=grants * credits.grant_interval
-                                )
-                                self.log.debug(
-                                    f"User {credits.name}: {prev_balance} -> {credits.balance} "
-                                    f"(+{gained}, cap {credits.cap})",
-                                    extra={
-                                        "action": "creditsgained",
-                                        "username": credits.name,
-                                    },
-                                )
-                        if updated:
-                            self.db_session.commit()
-                        available_balance += credits.balance
+                            
 
-                        mem_user = self.user_credits_dict.get(credits.name, None)
-                        if mem_user:
-                            to_stop = []
-                            for spawner in mem_user.spawners.values():
-                                if not getattr(spawner, "_billing_interval", None):
-                                    continue
-                                if not getattr(spawner, "_billing_value", None):
-                                    continue
-                                try:
-                                    spawner_id_str = str(spawner.orm_spawner.id)
-                                    if not spawner.active:
-                                        if (
-                                            spawner_id_str
-                                            in credits.spawner_bills.keys()
-                                        ):
-                                            del credits.spawner_bills[spawner_id_str]
+                            # All projects and user credits are updated.
+                            # Now check running spawners and bill credits
+                            mem_user = self.user_credits_dict.get(credit_user.name, None)
+                            if mem_user:
+                                to_stop = []
+                                for spawner in mem_user.spawners.values():
+                                    if not getattr(spawner, "_billing_interval", None):
                                         continue
-                                    if not spawner.ready:
+                                    if not getattr(spawner, "_billing_value", None):
                                         continue
-                                    last_billed = None
-                                    # When restarting the Hub the last bill timestamp
-                                    # will be stored in the database. Use this one.
-                                    force_bill = False
-                                    if spawner_id_str in credits.spawner_bills.keys():
-                                        last_billed = datetime.fromisoformat(
-                                            credits.spawner_bills[spawner_id_str]
-                                        )
-                                        # If the last bill timestamp is older than started, it's from
-                                        # a previous running lab and should not be used.
-                                        if last_billed < spawner.orm_spawner.started:
+                                        
+                                    try:
+                                        spawner_id_str = str(spawner.orm_spawner.id)
+                                        if not spawner.active:
+                                            if (
+                                                spawner_id_str
+                                                in credit_user.spawner_bills.keys()
+                                            ):
+                                                del credit_user.spawner_bills[spawner_id_str]
+                                            continue
+                                        if not spawner.ready:
+                                            continue
+                                        last_billed = None
+                                        # When restarting the Hub the last bill timestamp
+                                        # will be stored in the database. Use this one.
+                                        force_bill = False
+                                        if spawner_id_str in credit_user.spawner_bills.keys():
+                                            last_billed = datetime.fromisoformat(
+                                                credit_user.spawner_bills[spawner_id_str]
+                                            )
+                                            # If the last bill timestamp is older than started, it's from
+                                            # a previous running lab and should not be used.
+                                            if last_billed < spawner.orm_spawner.started:
+                                                force_bill = True
+                                                last_billed = now
+                                        else:
+                                            # If no bill timestamp is available we'll use the current timestamp
+                                            # Using started would be unfair, since we don't know how long it took
+                                            # to actually be usable. Users should only "pay" for ready spawners.
                                             force_bill = True
                                             last_billed = now
-                                    else:
-                                        # If no bill timestamp is available we'll use the current timestamp
-                                        # Using started would be unfair, since we don't know how long it took
-                                        # to actually be usable. Users should only "pay" for ready spawners.
-                                        force_bill = True
-                                        last_billed = now
 
-                                    elapsed = (now - last_billed).total_seconds()
-                                    if (
-                                        elapsed >= spawner._billing_interval
-                                        or force_bill
-                                    ):
-                                        # When force_bill is true we have to make sure to bill the first
-                                        # interval as well
-                                        bills = max(
-                                            int(elapsed // spawner._billing_interval), 1
-                                        )
-                                        cost = bills * spawner._billing_value
-                                        if cost > available_balance:
-                                            # Stop Server. Not enough credits left for next interval
-                                            to_stop.append(spawner.name)
-                                            self.log.info(
-                                                f"User Credits exceeded. Stopping Server '{mem_user.name}:{spawner.name}' (Credits available: {available_balance}, Cost: {cost})",
-                                                extra={
-                                                    "action": "creditsexceeded",
-                                                    "userid": mem_user.id,
-                                                    "username": mem_user.name,
-                                                    "servername": spawner.name,
-                                                },
+                                        elapsed = (now - last_billed).total_seconds()
+                                        if (
+                                            elapsed >= spawner._billing_interval
+                                            or force_bill
+                                        ):
+                                            user_options = getattr(spawner, "user_options", {})
+                                            # Find the correct CreditsUserValues and Project entry for this spawner
+                                            user_credits_for_spawner = None
+                                            
+                                            for cuv in credit_user.credits_user_values:
+                                                if user_credits_for_spawner is None:
+                                                    match = self.match_user_options(
+                                                        user_options, cuv.user_options or {}
+                                                    )
+                                                    self.log.debug(
+                                                        f"Test if spawner user_options {user_options} match configured user_options {cuv.user_options or {}} : {match}"
+                                                    )
+                                                    if match:
+                                                        user_credits_for_spawner = cuv
+                                                        break
+                                            
+                                            if not user_credits_for_spawner:
+                                                self.log.warning(f"No matching CreditsUserValues found for spawner {spawner._log_name}. Stop Spawner.")
+                                                to_stop.append(spawner.name)
+                                                continue
+                                            available_balance = 0
+                                            project_credits_for_spawner = None
+                                            self.log.debug(f"Using user credits '{user_credits_for_spawner.name}' for spawner {spawner._log_name}")
+                                            available_balance += user_credits_for_spawner.balance
+                                            prev_balance = user_credits_for_spawner.balance
+                                            if user_credits_for_spawner.project:
+                                                project_credits_for_spawner = user_credits_for_spawner.project
+                                                self.log.debug(f"Using project credits '{project_credits_for_spawner.name}' for spawner {spawner._log_name}")
+                                                available_balance += project_credits_for_spawner.balance
+                                                proj_prev_balance = project_credits_for_spawner.balance
+                                                
+                                            # When force_bill is true we have to make sure to bill the first
+                                            # interval as well
+                                            bills = max(
+                                                int(elapsed // spawner._billing_interval), 1
                                             )
-                                        else:
-                                            if credits.project:
-                                                if cost > credits.project.balance:
-                                                    proj_cost = credits.project.balance
-                                                else:
-                                                    proj_cost = cost
-                                                credits.project.balance -= proj_cost
-                                                cost -= proj_cost
+                                            cost = bills * spawner._billing_value
+                                            if cost > available_balance:
+                                                # Stop Server. Not enough credits left for next interval
+                                                to_stop.append(spawner.name)
+                                                self.log.info(
+                                                    f"User Credits exceeded. Stopping Server '{mem_user.name}:{spawner.name}' (Credits available: {available_balance}, Cost: {cost})",
+                                                    extra={
+                                                        "action": "creditsexceeded",
+                                                        "userid": mem_user.id,
+                                                        "username": mem_user.name,
+                                                        "servername": spawner.name,
+                                                    },
+                                                )
+                                            else:
+                                                if project_credits_for_spawner:
+                                                    if cost > project_credits_for_spawner.balance:
+                                                        proj_cost = project_credits_for_spawner.balance
+                                                    else:
+                                                        proj_cost = cost
+                                                    project_credits_for_spawner.balance -= proj_cost
+                                                    cost -= proj_cost
+                                                    self.log.debug(
+                                                        f"Project {project_credits_for_spawner.name} credits recuded by {proj_cost} ({proj_prev_balance} -> {project_credits_for_spawner.balance}) for server '{spawner._log_name}' ({elapsed}s since last bill timestamp)",
+                                                        extra={
+                                                            "action": "creditspaid",
+                                                            "userid": mem_user.id,
+                                                            "username": mem_user.name,
+                                                            "servername": spawner.name,
+                                                            "projectname": project_credits_for_spawner.name,
+                                                        },
+                                                    )
+
+                                                user_credits_for_spawner.balance -= cost
+                                                if not force_bill:
+                                                    last_billed += timedelta(
+                                                        seconds=bills
+                                                        * spawner._billing_interval
+                                                    )
                                                 self.log.debug(
-                                                    f"Project {credits.project_name} credits recuded by {proj_cost} ({proj_prev_balance} -> {credits.project.balance}) for server '{spawner._log_name}' ({elapsed}s since last bill timestamp)",
+                                                    f"User {mem_user.name} credits recuded by {cost} ({prev_balance} -> {user_credits_for_spawner.balance}) for server '{spawner._log_name}' ({elapsed}s since last bill timestamp)",
                                                     extra={
                                                         "action": "creditspaid",
                                                         "userid": mem_user.id,
                                                         "username": mem_user.name,
                                                         "servername": spawner.name,
-                                                        "projectname": credits.project_name,
                                                     },
                                                 )
-
-                                            credits.balance -= cost
-                                            if not force_bill:
-                                                last_billed += timedelta(
-                                                    seconds=bills
-                                                    * spawner._billing_interval
+                                                credit_user.spawner_bills[spawner_id_str] = (
+                                                    last_billed.isoformat()
                                                 )
-                                            self.log.debug(
-                                                f"User {mem_user.name} credits recuded by {cost} ({prev_balance} -> {credits.balance}) for server '{spawner._log_name}' ({elapsed}s since last bill timestamp)",
-                                                extra={
-                                                    "action": "creditspaid",
-                                                    "userid": mem_user.id,
-                                                    "username": mem_user.name,
-                                                    "servername": spawner.name,
-                                                },
-                                            )
-                                            credits.spawner_bills[spawner_id_str] = (
-                                                last_billed.isoformat()
-                                            )
-                                            self.db_session.commit()
-                                except:
-                                    self.log.exception(
-                                        f"Error while updating user credits for {credits} in spawner {spawner._log_name}."
-                                    )
+                                                self.db_session.commit()
+                                    except:
+                                        self.log.exception(
+                                            f"Error while updating user credits for {credit_user} in spawner {spawner._log_name}."
+                                        )
 
-                            for spawner_name in to_stop:
-                                asyncio.create_task(mem_user.stop(spawner_name))
-                    except:
-                        self.log.exception(
-                            f"Error while updating user credits for {credits}."
-                        )
+                                for spawner_name in to_stop:
+                                    asyncio.create_task(mem_user.stop(spawner_name))
+                        except:
+                            self.log.exception(
+                                f"Error while updating user credits for {credits}."
+                            )
             except:
                 self.log.exception("Error while updating user credits.")
             finally:
@@ -421,10 +480,13 @@ class CreditsAuthenticator(Authenticator):
                     await self.run_credits_task_post_hook()
                 except:
                     self.log.exception("Exception in credits_task_post_hook")
-                self.user_credits_sse_event.set()
                 tac = time.time() - tic
                 self.log.debug(f"Credit task took {tac}s to update all user credits")
+                self.credits_task_event.set()
+                await asyncio.sleep(0)  # give waiters time to proceed
+                self.credits_task_event.clear()
                 await asyncio.sleep(self.credits_task_interval)
+
 
     def credits_append_user(self, user):
         if user.name not in self.user_credits_dict.keys():
@@ -433,157 +495,146 @@ class CreditsAuthenticator(Authenticator):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if self.credits_enabled:
+            self.credits_task_event = asyncio.Event()
             hub = self.parent
-            session_factory = orm.new_session_factory(
-                hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
-            )
-            self.db_session = session_factory()
+            # session_factory = orm.new_session_factory(
+            #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
+            # )
+
+            self.db_session = hub.db
             from sqlalchemy import create_engine
 
             engine = create_engine(hub.db_url)
             Base.metadata.create_all(engine)
             self.credits_task = asyncio.create_task(self.credit_reconciliation_task())
 
-    async def update_user_credit(self, orm_user):
+    async def update_user_credit(self, auth_model):
         # Create new ORMUserCredits or ORMProjectCredits entries
-        # or Update existing ones, if the config returns new values
-        # than listed in the db
+        # or Update existing ones, if the config returns values
+        # that are not different than values in db
+        user_name = auth_model.get("name", None)
+        auth_state = auth_model.get("auth_state", {})
+        user_groups = auth_model.get("groups", [])
+        user_admin = auth_model.get("admin", False)
+        
         async def resolve_value(value):
             if callable(value):
-                value = value(orm_user.name, orm_user.groups, orm_user.admin)
+                value = value(user_name, user_groups, user_admin, auth_state)
             if inspect.isawaitable(value):
                 value = await value
             return value
 
-        # Check if all configured projects are in database
-        available_projects = self.credits_available_projects
-        if callable(available_projects):
-            available_projects = available_projects()
-            if inspect.isawaitable(available_projects):
-                available_projects = await available_projects
+        grant_last_update = utcnow(with_tz=False)
 
-        for project in available_projects:
-            if not project.get("name", None):
-                self.log.warning(
-                    "Credits Project requires a 'name'. Fix required for Authenticator.credits_available_projects. Skip project"
-                )
-                continue
-            project_name = project["name"]
-            if "cap" not in project.keys():
-                self.log.warning(
-                    f"Credits Project requires a 'cap'. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
-                )
-                continue
-            if "grant_value" not in project.keys():
-                self.log.warning(
-                    f"Credits Project requires a 'grant_value'. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
-                )
-                continue
-            if "grant_interval" not in project.keys():
-                self.log.warning(
-                    f"Credits Project requires a 'grant_interval'. Fix required for Authenticator.credits_available_projects. Skip project {project_name}"
-                )
-                continue
-
-            orm_project_credits = ORMProjectCredits.get_project(
-                self.db_session, project_name=project_name
-            )
-            if not orm_project_credits:
-                # Create entry in database
-                project["balance"] = project["cap"]
-                orm_project_credits = ORMProjectCredits(**project)
-                self.db_session.add(orm_project_credits)
-                self.db_session.commit()
-            else:
-                # Check + Update project
-                prev_project_balance = orm_project_credits.balance
-                prev_project_cap = orm_project_credits.cap
-                prev_project_grant_value = orm_project_credits.grant_value
-                prev_project_grant_interval = orm_project_credits.grant_interval
-                proj_updated = False
-                if prev_project_cap != project["cap"]:
-                    proj_updated = True
-                    orm_project_credits.cap = project["cap"]
-                    if prev_project_balance > orm_project_credits.cap:
-                        orm_project_credits.balance = orm_project_credits.cap
-                if prev_project_grant_value != project["grant_value"]:
-                    proj_updated = True
-                    orm_project_credits.grant_value = project["grant_value"]
-                if prev_project_grant_interval != project["grant_interval"]:
-                    proj_updated = True
-                    orm_project_credits.grant_interval = project["grant_interval"]
-                if proj_updated:
-                    self.db_session.commit()
-
-        cap = await resolve_value(self.credits_user_cap)
-        user_grant_value = await resolve_value(self.credits_user_grant_value)
-        user_grant_interval = await resolve_value(self.credits_user_grant_interval)
-        user_project_name = await resolve_value(self.credits_user_project)
-
-        credits_values = {
-            "cap": cap,
-            "grant_value": user_grant_value,
-            "grant_interval": user_grant_interval,
-            "grant_last_update": utcnow(with_tz=False),
-            "project": None,
-        }
-        if user_project_name:
-            orm_user_project = ORMProjectCredits.get_project(
-                self.db_session, user_project_name
-            )
-            if orm_user_project:
-                credits_values["project"] = orm_user_project
-            else:
-                self.log.warning(
-                    f"Configured project ({user_project_name}) for {orm_user.name} not in Authenticator.available_projects"
-                )
-
-        # Add / Update ORMUserCredits entry
-        orm_user_credits = ORMUserCredits.get_user(self.db_session, orm_user.name)
-
-        if not orm_user_credits:
-            credits_values["balance"] = credits_values["cap"]
-            orm_user_credits = ORMUserCredits(name=orm_user.name, **credits_values)
-            self.db_session.add(orm_user_credits)
+        credits_user_database = CreditsUser.get_user(self.db_session, user_name)
+        if not credits_user_database:
+            # Add CreditsUser entry
+            credits_user_database = CreditsUser(name=user_name)
+            self.db_session.add(credits_user_database)
             self.db_session.commit()
-        else:
-            prev_user_balance = orm_user_credits.balance
-            prev_user_cap = orm_user_credits.cap
-            prev_grant_value = orm_user_credits.grant_value
-            prev_grant_interval = orm_user_credits.grant_interval
-            prev_project = orm_user_credits.project
-            updated = False
-            if prev_user_cap != credits_values["cap"]:
-                updated = True
-                orm_user_credits.cap = credits_values["cap"]
-                if prev_user_balance > orm_user_credits.cap:
-                    orm_user_credits.balance = orm_user_credits.cap
-            if prev_grant_value != credits_values["grant_value"]:
-                updated = True
-                orm_user_credits.grant_value = credits_values["grant_value"]
-            if prev_grant_interval != credits_values["grant_interval"]:
-                updated = True
-                orm_user_credits.grant_interval = credits_values["grant_interval"]
-            if getattr(prev_project, "name", None) != credits_values["project"]:
-                updated = True
-                orm_user_credits.project = credits_values["project"]
-            if updated:
+        
+        # Collect configured values
+        credits_user_values_configured = await resolve_value(self.credits_user)
+        if type(credits_user_values_configured) == dict:
+            credits_user_values_configured = [credits_user_values_configured]
+            
+        credits_user_values_configured_names = []
+        credits_user_values_configured_by_name = {}
+        if credits_user_values_configured:
+            for x in credits_user_values_configured:
+                if "name" not in x.keys():
+                    self.log.warning(f"User Credit Configuration has no name. Use name default as placeholder.")
+                    x["name"] = "default"
+                credits_user_values_configured_names.append(x["name"])
+                credits_user_values_configured_by_name[x["name"]] = x
+        
+        
+        # 1. Keep database entries that are currently configured
+        for credits_user_value_db in credits_user_database.credits_user_values:
+            if credits_user_value_db.name not in credits_user_values_configured_names:
+                self.db_session.delete(credits_user_value_db)
                 self.db_session.commit()
+
+        for name, credits_user_value in credits_user_values_configured_by_name.items():
+            # Does the configuration for the user exist in database, update it. Otherwise create it
+            
+            orm_project = None
+            configured_project = credits_user_value.get("project", None)
+            if configured_project and configured_project.get("name", None):
+                project = self.credits_validate_and_update_project(configured_project)
+                if not project:
+                    continue
+                orm_project = CreditsProject.get_project(self.db_session, configured_project["name"])
+
+                if not orm_project:
+                    # Create entry in database
+                    project["balance"] = project["cap"]
+                    orm_project = CreditsProject(**project)
+                    self.db_session.add(orm_project)
+                    self.db_session.commit()
+                else:
+                    # Check + Update project
+                    prev_project_balance = orm_project.balance
+                    prev_project_cap = orm_project.cap
+                    prev_project_grant_value = orm_project.grant_value
+                    prev_project_grant_interval = orm_project.grant_interval
+                    proj_updated = False
+                    if prev_project_cap != project["cap"]:
+                        proj_updated = True
+                        orm_project.cap = project["cap"]
+                        if prev_project_balance > orm_project.cap:
+                            orm_project.balance = orm_project.cap
+                    if prev_project_grant_value != project["grant_value"]:
+                        proj_updated = True
+                        orm_project.grant_value = project["grant_value"]
+                    if prev_project_grant_interval != project["grant_interval"]:
+                        proj_updated = True
+                        orm_project.grant_interval = project["grant_interval"]
+                    if proj_updated:
+                        self.db_session.add(orm_project)
+                        self.db_session.commit()
+                    
+            database_entry = CreditsUser.get_user(self.db_session, user_name).credits_user_values
+            database_entry = [x for x in database_entry if x.name == name]
+            if database_entry:
+                database_entry = database_entry[0]
+                database_entry.cap = credits_user_value.get("cap")
+                database_entry.grant_value = credits_user_value.get("grant_value")
+                database_entry.grant_interval = credits_user_value.get("grant_interval")
+                database_entry.user_options = credits_user_value.get("user_options", None)
+                if database_entry.balance > database_entry.cap:
+                    database_entry.balance = database_entry.cap
+                database_entry.project = orm_project
+                # Add existing DB Project to existing userconfig entry
+            else:
+                database_entry = CreditsUserValues(
+                    name=name,
+                    balance=credits_user_value["cap"],
+                    cap=credits_user_value["cap"],
+                    grant_value=credits_user_value["grant_value"],
+                    grant_interval=credits_user_value["grant_interval"],
+                    grant_last_update=grant_last_update,
+                    user_options=credits_user_value.get("user_options", None),
+                    credits_user=credits_user_database,
+                    project=orm_project,
+                )
+            self.db_session.add(database_entry)
+            self.db_session.commit()
 
     async def run_post_auth_hook(self, handler, auth_model):
+        auth_model = await super().run_post_auth_hook(handler, auth_model)
         if self.credits_enabled:
-            orm_user = (
-                self.db_session.query(ORMUser)
-                .filter(ORMUser.name == auth_model["name"])
-                .first()
-            )
+            orm_user = ORMUser.find(self.db_session, auth_model["name"])
             # If it's a new user there won't be an entry.
             # This case will be handled in .add_user()
             if orm_user:
-                await self.update_user_credit(orm_user)
-        return await super().run_post_auth_hook(handler, auth_model)
-
-    async def add_user(self, orm_user):
-        super().add_user(orm_user)
+                auth_model["groups"] = orm_user.groups or []
+                auth_model["admin"] = orm_user.admin or False
+            await self.update_user_credit(auth_model)
+        return auth_model
+    
+    async def add_user(self, user):
+        super().add_user(user)
         if self.credits_enabled:
-            await self.update_user_credit(orm_user)
+            pass
+            # await self.update_user_credit(getattr(user, "orm_user", user))

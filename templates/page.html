@@ -112,9 +112,14 @@
         creditsEvtSource.onmessage = (e) => {
           try {
             const jsonData = JSON.parse(event.data);
-            var htmlText = `Credits: ${jsonData.balance}/${jsonData.cap}`;
-            if ( jsonData.project ) {
-              htmlText += ` (${jsonData.project.name}: ${jsonData.project.balance} / ${jsonData.project.cap})`;
+            var htmlText = `Credits:`;
+            if (Array.isArray(jsonData)) {
+              jsonData.forEach((item) => {
+                htmlText += ` User (${item.name}): ${item.balance}/${item.cap}`;
+                if (item.project) {
+                  htmlText += ` Project: (${item.project.name}): ${item.project.balance} / ${item.project.cap}`;
+                }
+              });
             }
             const span = document.getElementById("credits-user");
             span.innerHTML = htmlText;

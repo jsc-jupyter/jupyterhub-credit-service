@@ -13,31 +13,34 @@ from tornado import web
 from tornado.iostream import StreamClosedError
 from tornado.web import HTTPError, authenticated
 
-from .orm import ProjectCredits, UserCredits
+from .orm import CreditsProject, CreditsUser
 
 background_task = None
 import json
 
 
-def get_model(user_credits):
-    model = {
-        "balance": user_credits.balance,
-        "cap": user_credits.cap,
-        "grant_value": user_credits.grant_value,
-        "grant_interval": user_credits.grant_interval,
-        "grant_last_update": user_credits.grant_last_update.isoformat(),
-    }
-    project = user_credits.project
-    if project:
-        project_model = {
-            "name": project.name,
-            "balance": project.balance,
-            "cap": project.cap,
-            "grant_value": project.grant_value,
-            "grant_interval": project.grant_interval,
-            "grant_last_update": project.grant_last_update.isoformat(),
-        }
-        model.update({"project": project_model})
+def get_model(credits_user):
+    model = []
+    for cuv in credits_user.credits_user_values:
+        model.append({
+            "name": cuv.name,
+            "balance": cuv.balance,
+            "cap": cuv.cap,
+            "grant_value": cuv.grant_value,
+            "grant_interval": cuv.grant_interval,
+            "grant_last_update": cuv.grant_last_update.isoformat(),
+        })
+        if cuv.project:
+            model[-1].update({
+                "project": {
+                    "name": cuv.project.name,
+                    "balance": cuv.project.balance,
+                    "cap": cuv.project.cap,
+                    "grant_value": cuv.project.grant_value,
+                    "grant_interval": cuv.project.grant_interval,
+                    "grant_last_update": cuv.project.grant_last_update.isoformat(),
+                }
+            })
     return model
 
 
@@ -81,26 +84,20 @@ class CreditsSSEAPIHandler(APIHandler):
 
             await asyncio.wait([self._finish_future], timeout=self.keepalive_interval)
 
-    async def get_user_credits(self, user):
-        user_credits = UserCredits.get_user(user.authenticator.db_session, user.name)
-        model = get_model(user_credits)
-        return model
-
     async def event_handler(self, user):
-        sse_event = user.authenticator.user_credits_sse_event
-
+        user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        
         while (
             type(self._finish_future) is asyncio.Future
             and not self._finish_future.done()
         ):
-            model_credits = await self.get_user_credits(user)
+            user.authenticator.db_session.refresh(user_credits)
+            model_credits = get_model(user_credits)            
             try:
                 yield model_credits
             except GeneratorExit as e:
                 raise e
-            finally:
-                sse_event.clear()
-            await sse_event.wait()
+            await user.authenticator.credits_task_event.wait()
 
     @authenticated
     async def get(self):
@@ -136,70 +133,105 @@ class CreditsAPIHandler(APIHandler):
         if not user.authenticator.credits_enabled:
             raise HTTPError(404, "Credits function is currently disabled")
 
-        user_credits = (
-            user.authenticator.db_session.query(UserCredits)
-            .filter(UserCredits.name == user.name)
-            .first()
-        )
+        credits_user = CreditsUser.get_user(user.authenticator.db_session, user.name)
 
-        if not user_credits:
+        if not credits_user:
             # Create entry for user with default values
             raise HTTPError(404, "No credit entry found for user")
 
-        model = get_model(user_credits)
+        model = get_model(credits_user)
 
         self.write(json.dumps(model))
 
 
 class CreditsUserAPIHandler(APIHandler):
     @needs_scope("admin:users")
-    async def post(self, user_name):
+    async def post(self, user_name, credit_name):
         user = self.find_user(user_name)
         if not user:
             raise HTTPError(404, "User not found")
         data = self.get_json_body()
-        credits = (
-            user.authenticator.db_session.query(UserCredits)
-            .filter(UserCredits.name == user.name)
-            .first()
-        )
-        if not credits:
+        credits_user = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        if not credits_user:
             # Create entry for user with default values
             raise HTTPError(404, "No credit entry found for user")
-        balance = data.get("balance", None)
-        cap = data.get("cap", None)
-        grant_value = data.get("grant_value", None)
-        grant_interval = data.get("grant_interval", None)
-        project_name = data.get("project_name", None)
-
+        balance = cap = grant_value = grant_interval = None
+        project_balance = project_cap = project_grant_value = project_grant_interval = None
+        credits_user_values = None
+        for cuv in credits_user.credits_user_values:
+            if cuv.name == credit_name:
+                credits_user_values = cuv
+                balance = data.get("balance", None)
+                cap = data.get("cap", None)
+                grant_value = data.get("grant_value", None)
+                grant_interval = data.get("grant_interval", None)
+                project = data.get("project", None)
+                if project:
+                    project_balance = project.get("balance", None)
+                    project_cap = project.get("cap", None)
+                    project_grant_value = project.get("grant_value", None)
+                    project_grant_interval = project.get("grant_interval", None)
+                break
+        if not credits_user_values:
+            raise HTTPError(404, f"Credit entry '{credit_name}' not found for user")
         if balance and cap and balance > cap:
             raise HTTPError(
                 400, f"Balance can't be bigger than cap ({balance} / {cap})"
             )
-        if balance and balance > credits.cap:
+        if balance and balance > credits_user_values.cap:
             raise HTTPError(
-                400, f"Balance can't be bigger than cap ({balance} / {credits.cap})"
+                400, f"Balance can't be bigger than cap ({balance} / {credits_user_values.cap})"
             )
         if balance and balance < 0:
             raise HTTPError(400, "Balance can't be negative")
         if balance:
-            credits.balance = balance
+            credits_user_values.balance = balance
         if cap:
-            credits.cap = cap
+            credits_user_values.cap = cap
         if grant_value:
-            credits.grant_value = grant_value
+            credits_user_values.grant_value = grant_value
         if grant_interval:
-            credits.grant_interval = grant_interval
-        if project_name:
-            project = (
-                user.authenticator.db_session.query(ProjectCredits)
-                .filter(ProjectCredits.name == project_name)
-                .first()
-            )
-            if not project:
-                raise HTTPError(404, f"Unknown project {project_name}.")
-            credits.project = project
-        user.authenticator.db_session.add(credits)
+            credits_user_values.grant_interval = grant_interval
+        if project and credits_user_values.project:
+            prev_project_balance = credits_user_values.project.balance
+            prev_project_cap = credits_user_values.project.cap
+            prev_project_grant_value = credits_user_values.project.grant_value
+            prev_project_grant_interval = credits_user_values.project.grant_interval
+            proj_updated = False
+            if project_cap and prev_project_cap != project_cap:
+                proj_updated = True
+                credits_user_values.project.cap = project_cap
+            if project_balance and prev_project_balance != project_balance:
+                proj_updated = True
+                credits_user_values.project.balance = project_balance
+            if credits_user_values.project.cap < credits_user_values.project.balance:
+                credits_user_values.project.balance = credits_user_values.project.cap
+            if project_grant_value and prev_project_grant_value != project_grant_value:
+                proj_updated = True
+                credits_user_values.project.grant_value = project_grant_value
+            if project_grant_interval and prev_project_grant_interval != project_grant_interval:
+                proj_updated = True
+                credits_user_values.project.grant_interval = project_grant_interval
+            if proj_updated:
+                user.authenticator.db_session.add(credits_user_values.project)
+                user.authenticator.db_session.commit()        
+        elif project and not credits_user_values.project:
+            _project = user.authenticator.credits_validate_and_update_project(credits_user_values)
+            if not _project:
+                self.log.error(f"Failed to validate and update project: {credits_user_values}")
+                self.set_status(400)
+                return
+            else:
+                _project["balance"] = _project["cap"]
+                orm_project = CreditsProject(**_project)
+                user.authenticator.db_session.add(orm_project)
+                credits_user_values.project = orm_project
+                user.authenticator.db_session.commit()
+        elif not project and credits_user_values.project:
+            user.authenticator.db_session.delete(credits_user_values.project)
+            credits_user_values.project = None
+
+        user.authenticator.db_session.add(credits_user)
         user.authenticator.db_session.commit()
         self.set_status(200)
 
@@ -213,11 +245,7 @@ class CreditsProjectAPIHandler(APIHandler):
         grant_value = data.get("grant_value", None)
         grant_interval = data.get("grant_interval", None)
 
-        project = (
-            self.current_user.authenticator.db_session.query(ProjectCredits)
-            .filter(ProjectCredits.name == project_name)
-            .first()
-        )
+        project = CreditsProject.get_project(self.current_user.authenticator.db_session, project_name)
 
         if not project:
             raise HTTPError(404, f"Unknown project {project_name}.")

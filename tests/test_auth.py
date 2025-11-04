@@ -1,478 +1,475 @@
 """Tests for CreditsAuthenticator / CreditsAuthenticator"""
 
 import asyncio
+import copy
 
 import pytest
 
-from jupyterhub_credit_service.orm import UserCredits as ORMUserCredits
+from jupyterhub_credit_service.orm import CreditsUser
 
 from .conftest import MockCreditsAuthenticator
 
-available_projects = [
-    {"name": "community1", "cap": 1000, "grant_interval": 600, "grant_value": 60},
-    {"name": "community2", "cap": 7, "grant_interval": 1200, "grant_value": 120},
-]
+user_credits_simple = {
+    "name": "default",
+    "cap": 500,
+    "grant_value": 50,
+    "grant_interval": 300
+}
+
+def user_credits_simple_function(username, groups, is_admin, auth_state):
+    return user_credits_simple
+
+def user_credits_simple_function_list(username, groups, is_admin, auth_state):
+    return [user_credits_simple]
+
+async def async_user_credits_simple_function(username, groups, is_admin, auth_state):
+    return user_credits_simple
+
+async def async_user_credits_simple_function_list(username, groups, is_admin, auth_state):
+    return [user_credits_simple]
+
+user_credits_simple_project = {
+    "name": "community1",
+    "cap": 500,
+    "grant_value": 50,
+    "grant_interval": 300,
+    "project": {
+        "name": "community1",
+        "cap": 1000,
+        "grant_interval": 600,
+        "grant_value": 60
+    },
+}
+
+user_credits_simple_project_list = [{
+    "name": "community1",
+    "cap": 500,
+    "grant_value": 50,
+    "grant_interval": 300,
+    "project": {
+        "name": "community1",
+        "cap": 1000,
+        "grant_interval": 600,
+        "grant_value": 60
+    },
+}]
+
+user_credits_multiple_w_default = [{
+    "name": "systemA",
+    "cap": 500,
+    "grant_value": 50,
+    "grant_interval": 300,
+    "project": {
+        "name": "systemA",
+        "cap": 7,
+        "grant_interval": 1200,
+        "grant_value": 120
+    },
+    "user_options": {"system": "A"}
+},{
+    "name": "default",
+    "cap": 600,
+    "grant_value": 60,
+    "grant_interval": 400
+}]
+
+user_credits_multiple_wo_default = [{
+    "cap": 500,
+    "name": "systemA",
+    "grant_value": 50,
+    "grant_interval": 300,
+    "project": {
+        "name": "systemA",
+        "cap": 7,
+        "grant_interval": 1200,
+        "grant_value": 120
+    },
+    "user_options": {"system": "A"}
+},{
+    "name": "systemB",
+    "cap": 600,
+    "grant_value": 60,
+    "grant_interval": 400,
+    "project": {
+        "name": "systemB",
+        "cap": 7,
+        "grant_interval": 1200,
+        "grant_value": 120
+    },
+    "user_options": {"system": "B"}
+}]
+
+user_credits_multiple_wo_default_multimatch = [{
+    "name": "systemA",
+    "cap": 500,
+    "grant_value": 50,
+    "grant_interval": 300,
+    "project": {
+        "name": "systemA",
+        "cap": 7,
+        "grant_interval": 1200,
+        "grant_value": 120
+    },
+    "user_options": {"system": "A"}
+},{
+    "name": "systemA2",
+    "cap": 600,
+    "grant_value": 60,
+    "grant_interval": 400,
+    "project": {
+        "name": "systemA2",
+        "cap": 7,
+        "grant_interval": 1200,
+        "grant_value": 120
+    },
+    "user_options": {"system": "A"}
+}]
+
 
 
 @pytest.mark.asyncio
-async def test_credits_enabled_flag():
-    # Enabled by default
-    auth = MockCreditsAuthenticator()
-    assert auth.credits_enabled is True
-
-    # Disabled explicitly
-    auth_disabled = MockCreditsAuthenticator()
-    auth_disabled.credits_enabled = False
-    assert auth_disabled.credits_enabled is False
-
-
-@pytest.mark.asyncio
-async def test_credits_user_cap_integer(app, user):
-    app.authenticator.credits_user_cap = 105
+async def test_credits_user_simple(app, user):
+    app.authenticator.credits_user = user_credits_simple
     await app.login_user(user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user.name)
-        .first()
-    )
-    assert user_credits.cap == 105
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 1
+    for key, value in user_credits_simple.items():
+        assert getattr(user_credits_values[0], key) == value
+    assert getattr(user_credits_values[0], "balance") == user_credits_simple["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "project_name") is None
+
+@pytest.mark.asyncio
+async def test_credits_user_simple_list(app, user):
+    app.authenticator.credits_user = [user_credits_simple]
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 1
+    for key, value in user_credits_simple.items():
+        assert getattr(user_credits_values[0], key) == value
+    assert getattr(user_credits_values[0], "balance") == user_credits_simple["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "project_name") is None
+
+@pytest.mark.asyncio
+async def test_credits_user_list_w_default(app, user):
+    app.authenticator.credits_user = user_credits_multiple_w_default
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 2
+    for key, value in user_credits_multiple_w_default[0].items():
+        if key == "project":
+            assert getattr(user_credits_values[0], "project_name") == value["name"], "Key project/project_name does not match"
+        else:
+            assert getattr(user_credits_values[0], key) == value, f"Key {key} does not match"
+    assert getattr(user_credits_values[0], "balance") == user_credits_multiple_w_default[0]["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "user_options") == user_credits_multiple_w_default[0]["user_options"]
+    
+    
+    for key, value in user_credits_multiple_w_default[1].items():
+        if key == "project":
+            assert getattr(user_credits_values[1], "project_name") == value["name"], "Key project/project_name does not match"
+        else:
+            assert getattr(user_credits_values[1], key) == value, f"Key {key} does not match"
+    assert getattr(user_credits_values[1], "balance") == user_credits_multiple_w_default[1]["cap"]
+    assert getattr(user_credits_values[1], "user_name") == user.name
+    assert getattr(user_credits_values[1], "project_name") is None
+    assert getattr(user_credits_values[1], "project") is None
+    assert getattr(user_credits_values[1], "user_options") is None
 
 
 @pytest.mark.asyncio
-async def test_credits_user_cap_function_username(app, users):
-    user1, user2 = users
-
-    def user_cap(username, groups, is_admin):
-        if username == user1.name:
-            return 150
-        return 100
-
-    app.authenticator.credits_user_cap = user_cap
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.cap == 150
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.cap == 100
+async def test_credits_user_list_wo_default(app, user):
+    app.authenticator.credits_user = user_credits_multiple_wo_default
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 2
+    for key, value in user_credits_multiple_wo_default[0].items():
+        if key == "project":
+            assert getattr(user_credits_values[0], "project_name") == value["name"], "Key project/project_name does not match"
+        else:
+            assert getattr(user_credits_values[0], key) == value, f"Key {key} does not match"
+    assert getattr(user_credits_values[0], "balance") == user_credits_multiple_wo_default[0]["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "user_options") == user_credits_multiple_wo_default[0]["user_options"]
+    
+    
+    for key, value in user_credits_multiple_wo_default[1].items():
+        if key == "project":
+            assert getattr(user_credits_values[1], "project_name") == value["name"], "Key project/project_name does not match"
+        else:
+            assert getattr(user_credits_values[1], key) == value, f"Key {key} does not match"
+    assert getattr(user_credits_values[1], "balance") == user_credits_multiple_wo_default[1]["cap"]
+    assert getattr(user_credits_values[1], "user_name") == user.name
+    assert getattr(user_credits_values[1], "user_options") == user_credits_multiple_wo_default[1]["user_options"]
 
 
 @pytest.mark.asyncio
-async def test_credits_user_cap_function_admin(app, user, admin_user):
-    def user_cap(username, groups, is_admin):
+async def test_credits_user_list_wo_default_multimatch(app, user):
+    app.authenticator.credits_user = user_credits_multiple_wo_default_multimatch
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 2
+    for key, value in user_credits_multiple_wo_default_multimatch[0].items():
+        if key == "project":
+            assert getattr(user_credits_values[0], "project_name") == value["name"], "Key project/project_name does not match"
+        else:
+            assert getattr(user_credits_values[0], key) == value, f"Key {key} does not match"
+    assert getattr(user_credits_values[0], "balance") == user_credits_multiple_wo_default_multimatch[0]["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "user_options") == user_credits_multiple_wo_default_multimatch[0]["user_options"]
+    
+    
+    for key, value in user_credits_multiple_wo_default_multimatch[1].items():
+        if key == "project":
+            assert getattr(user_credits_values[1], "project_name") == value["name"], "Key project/project_name does not match"
+        else:
+            assert getattr(user_credits_values[1], key) == value, f"Key {key} does not match"
+    assert getattr(user_credits_values[1], "balance") == user_credits_multiple_wo_default_multimatch[1]["cap"]
+    assert getattr(user_credits_values[1], "user_name") == user.name
+    assert getattr(user_credits_values[1], "user_options") == user_credits_multiple_wo_default_multimatch[1]["user_options"]
+
+
+@pytest.mark.asyncio
+async def test_credits_user_simple_func(app, user):
+    app.authenticator.credits_user = user_credits_simple_function
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 1
+    for key, value in user_credits_simple.items():
+        assert getattr(user_credits_values[0], key) == value
+    assert getattr(user_credits_values[0], "balance") == user_credits_simple["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "project_name") is None
+
+
+@pytest.mark.asyncio
+async def test_credits_user_simple_func_list(app, user):
+    app.authenticator.credits_user = user_credits_simple_function_list
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 1
+    for key, value in user_credits_simple.items():
+        assert getattr(user_credits_values[0], key) == value
+    assert getattr(user_credits_values[0], "balance") == user_credits_simple["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "project_name") is None
+
+@pytest.mark.asyncio
+async def test_credits_user_simple_asyncfunc(app, user):
+    app.authenticator.credits_user = async_user_credits_simple_function
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 1
+    for key, value in user_credits_simple.items():
+        assert getattr(user_credits_values[0], key) == value
+    assert getattr(user_credits_values[0], "balance") == user_credits_simple["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "project_name") is None
+
+
+@pytest.mark.asyncio
+async def test_credits_user_simple_asyncfunc_list(app, user):
+    app.authenticator.credits_user = async_user_credits_simple_function_list
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits_values = user_credits.credits_user_values
+    assert user_credits_values is not None
+    assert len(user_credits_values) == 1
+    for key, value in user_credits_simple.items():
+        assert getattr(user_credits_values[0], key) == value
+    assert getattr(user_credits_values[0], "balance") == user_credits_simple["cap"]
+    assert getattr(user_credits_values[0], "user_name") == user.name
+    assert getattr(user_credits_values[0], "project_name") is None
+
+@pytest.mark.asyncio
+async def test_credits_user_function_admin(app, user, admin_user):
+    admin_added_cap = 150
+    def user_credits_simple_function(username, groups, is_admin, auth_state):
+        ret = copy.deepcopy(user_credits_simple)
         if is_admin:
-            return 150
-        return 100
+            ret["cap"] += admin_added_cap
+        return ret
 
-    app.authenticator.credits_user_cap = user_cap
+
+    app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(admin_user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == admin_user.name)
-        .first()
-    )
-    assert user_credits.cap == 150
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, admin_user.name)
+    assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"] + admin_added_cap
 
     await app.login_user(user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user.name)
-        .first()
-    )
-    assert user_credits.cap == 100
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"]
 
 
 @pytest.mark.asyncio
-async def test_credits_user_cap_function_group(app, users, group):
+async def test_credits_user_function_group(app, users, group):
     user1, user2 = users
     group.users.append(user1.orm_user)
     app.db.commit()
-
-    def user_cap(username, groups, is_admin):
+    group_added_cap = 7
+    def user_credits_simple_function(username, groups, is_admin, auth_state):
+        ret = copy.deepcopy(user_credits_simple)
         if group.name in [g.name for g in groups]:
-            return 150
-        return 100
+            ret["cap"] += group_added_cap
+        return ret
 
-    app.authenticator.credits_user_cap = user_cap
+    app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.cap == 150
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user1.name)
+    assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"] + group_added_cap
 
     await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.cap == 100
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user2.name)
+    assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"]
 
 
 @pytest.mark.asyncio
-async def test_credits_user_cap_function_username_coroutine(app, users):
+async def test_credits_user_function_username_async(app, users):
     user1, user2 = users
-
-    async def user_cap(username, groups, is_admin):
+    user1_added_cap = 25
+    def user_credits_simple_function(username, groups, is_admin, auth_state):
+        ret = copy.deepcopy(user_credits_simple)
         if username == user1.name:
-            return 150
-        return 100
+            ret["cap"] += user1_added_cap
+        return ret
 
-    app.authenticator.credits_user_cap = user_cap
+    app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.cap == 150
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user1.name)
+    assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"] + user1_added_cap
 
     await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.cap == 100
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user2.name)
+    assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"]
 
 
 @pytest.mark.asyncio
-async def test_credits_user_grant_value_integer(app, user):
-    app.authenticator.credits_user_grant_value = 15
-    await app.login_user(user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user.name)
-        .first()
-    )
-    assert user_credits.grant_value == 15
+async def test_credits_available_projects_user_project(app, users):
 
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_value_function_username(app, users):
     user1, user2 = users
 
-    def user_grant_value(username, groups, is_admin):
+    def user_credits(username, groups, is_admin, auth_state):
+        ret = copy.deepcopy(user_credits_simple)
         if username == user1.name:
-            return 20
-        return 10
-
-    app.authenticator.credits_user_grant_value = user_grant_value
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.grant_value == 20
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.grant_value == 10
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_value_function_admin(app, user, admin_user):
-    def user_grant_value(username, groups, is_admin):
-        if is_admin:
-            return 20
-        return 10
-
-    app.authenticator.credits_user_grant_value = user_grant_value
-    await app.login_user(admin_user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == admin_user.name)
-        .first()
-    )
-    assert user_credits.grant_value == 20
-
-    await app.login_user(user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user.name)
-        .first()
-    )
-    assert user_credits.grant_value == 10
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_value_function_group(app, users, group):
-    user1, user2 = users
-    group.users.append(user1.orm_user)
-    app.db.commit()
-
-    def user_grant_value(username, groups, is_admin):
-        if group.name in [g.name for g in groups]:
-            return 20
-        return 10
-
-    app.authenticator.credits_user_grant_value = user_grant_value
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.grant_value == 20
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.grant_value == 10
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_value_function_username_coroutine(app, users):
-    user1, user2 = users
-
-    async def user_grant_value(username, groups, is_admin):
-        if username == user1.name:
-            return 20
-        return 10
-
-    app.authenticator.credits_user_grant_value = user_grant_value
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.grant_value == 20
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.grant_value == 10
-
-
-@pytest.mark.asyncio
-async def test_credits_available_projects_list_user_project(app, users):
-    app.authenticator.credits_available_projects = available_projects
-
-    user1, user2 = users
-
-    def user_project(username, groups, is_admin):
-        if username == user1.name:
-            return "community1"
+            ret["project"] = {"name": "community1", "cap": 1000, "grant_interval": 600, "grant_value": 60}
         elif username == user2.name:
-            return "community2"
-        return None
+            ret["project"] = {"name": "community2", "cap": 1000, "grant_interval": 600, "grant_value": 60}
+        return ret
 
-    app.authenticator.credits_user_project = user_project
+    app.authenticator.credits_user = user_credits
     await app.login_user(user1.name)
     await app.login_user(user2.name)
-    user_credits1 = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits1.project.name == "community1"
+    user_credits1 = CreditsUser.get_user(app.authenticator.db_session, user1.name)
+    assert user_credits1.credits_user_values[0].project.name == "community1"
+    assert user_credits1.credits_user_values[0].project_name == "community1"
 
-    user_credits2 = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits2.project.name == "community2"
+    user_credits2 = CreditsUser.get_user(app.authenticator.db_session, user2.name)
+    assert user_credits2.credits_user_values[0].project.name == "community2"
+    assert user_credits2.credits_user_values[0].project_name == "community2"
 
 
 @pytest.mark.asyncio
-async def test_credits_available_projects_list_user_projects_noproj(app, users):
-    app.authenticator.credits_available_projects = available_projects
+async def test_credits_available_projects_user_project_add_entry(app, user):
+    return_all = False
+    async def async_user_credits_runtime_change(username, groups, is_admin, auth_state):
+        if return_all:
+            return user_credits_multiple_w_default
+        else:
+            return user_credits_multiple_w_default[0]
 
-    user1, user2 = users
-
-    def user_projects(username, groups, is_admin):
-        if username == user1.name:
-            return "community1"
-        return None
-
-    app.authenticator.credits_user_project = user_projects
-    await app.login_user(user1.name)
-    await app.login_user(user2.name)
-    user_credits1 = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits1.project.name == "community1"
-
-    user_credits2 = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits2.project == None
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_interval_integer(app, user):
-    app.authenticator.credits_user_grant_interval = 900
+    app.authenticator.credits_user = async_user_credits_runtime_change
     await app.login_user(user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 900
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_interval_function_username(app, users):
-    user1, user2 = users
-
-    def user_grant_interval(username, groups, is_admin):
-        if username == user1.name:
-            return 1200
-        return 600
-
-    app.authenticator.credits_user_grant_interval = user_grant_interval
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 1200
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 600
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_interval_function_admin(app, user, admin_user):
-    def user_grant_interval(username, groups, is_admin):
-        if is_admin:
-            return 1200
-        return 600
-
-    app.authenticator.credits_user_grant_interval = user_grant_interval
-    await app.login_user(admin_user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == admin_user.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 1200
-
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    assert len(user_credits.credits_user_values) == 1
+    assert user_credits.credits_user_values[0].project.name == "systemA"
+    assert user_credits.credits_user_values[0].project_name == "systemA"
+    
+    return_all = True
     await app.login_user(user.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 600
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    assert len(user_credits.credits_user_values) == 2
+    assert user_credits.credits_user_values[0].project.name == "systemA"
+    assert user_credits.credits_user_values[0].project_name == "systemA"
+    assert user_credits.credits_user_values[0].name == "systemA"
+    assert user_credits.credits_user_values[1].name == "default"
+    assert user_credits.credits_user_values[1].project is None
+    assert user_credits.credits_user_values[1].project_name is None
+    
+
+@pytest.mark.asyncio
+async def test_credits_available_projects_user_project_del_entry(app, user):
+    return_all = True
+    async def async_user_credits_runtime_change(username, groups, is_admin, auth_state):
+        if return_all:
+            return user_credits_multiple_wo_default
+        else:
+            return user_credits_multiple_wo_default[-1]
+
+    app.authenticator.credits_user = async_user_credits_runtime_change
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    assert len(user_credits.credits_user_values) == 2
+    assert user_credits.credits_user_values[0].project.name == "systemA"
+    assert user_credits.credits_user_values[0].project_name == "systemA"
+    assert user_credits.credits_user_values[0].name == "systemA"
+    assert user_credits.credits_user_values[1].name == "systemB"
+    assert user_credits.credits_user_values[1].project.name == "systemB"
+    assert user_credits.credits_user_values[1].project_name == "systemB"
+    
+    return_all = False
+    await app.login_user(user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    assert len(user_credits.credits_user_values) == 1
+    assert user_credits.credits_user_values[0].project.name == "systemB"
+    assert user_credits.credits_user_values[0].project_name == "systemB"
+    
+    
+
 
 
 @pytest.mark.asyncio
-async def test_credits_user_grant_interval_function_group(app, users, group):
-    user1, user2 = users
-    group.users.append(user1.orm_user)
-    app.db.commit()
-
-    def user_grant_interval(username, groups, is_admin):
-        if group.name in [g.name for g in groups]:
-            return 1200
-        return 600
-
-    app.authenticator.credits_user_grant_interval = user_grant_interval
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 1200
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 600
-
-
-@pytest.mark.asyncio
-async def test_credits_user_grant_interval_function_username_coroutine(app, users):
-    user1, user2 = users
-
-    async def user_grant_interval(username, groups, is_admin):
-        if username == user1.name:
-            return 1200
-        return 600
-
-    app.authenticator.credits_user_grant_interval = user_grant_interval
-    await app.login_user(user1.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user1.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 1200
-
-    await app.login_user(user2.name)
-    user_credits = (
-        app.authenticator.db_session.query(ORMUserCredits)
-        .filter(ORMUserCredits.name == user2.name)
-        .first()
-    )
-    assert user_credits.grant_interval == 600
-
-
-@pytest.mark.asyncio
-async def test_credits_task_post_hook_async_called():
+async def test_credits_task_post_hook_async_called(app):
     hook_called = []
+    event = asyncio.Event()
 
     async def post_hook():
         hook_called.append(True)
+        event.set()
 
-    _ = MockCreditsAuthenticator(
-        credits_task_interval=1, credits_task_post_hook=post_hook
-    )
-
-    await asyncio.sleep(1)
+    app.authenticator.credits_task_post_hook = post_hook
+    await event.wait()
 
     assert hook_called, "Post-task hook was not executed"
 
 
 @pytest.mark.asyncio
-async def test_credits_task_post_hook_called():
+async def test_credits_task_post_hook_called(app):
     hook_called = []
+    event = asyncio.Event()
 
     def post_hook():
         hook_called.append(True)
+        event.set()
 
-    _ = MockCreditsAuthenticator(
-        credits_task_interval=1, credits_task_post_hook=post_hook
-    )
-
-    await asyncio.sleep(1)
+    app.authenticator.credits_task_post_hook = post_hook
+    await event.wait()
 
     assert hook_called, "Post-task hook was not executed"

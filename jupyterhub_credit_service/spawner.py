@@ -5,8 +5,7 @@ from jupyterhub.spawner import Spawner
 from tornado import web
 from traitlets import Any
 
-from .orm import UserCredits as ORMUserCredits
-
+from .orm import CreditsUser
 
 class CreditsException(web.HTTPError):
     jupyterhub_html_message = None
@@ -118,8 +117,6 @@ class CreditsSpawner(Spawner):
 
     async def run_pre_spawn_hook(self):
         if self.user.authenticator.credits_enabled:
-            await self.user.authenticator.update_user_credit(self.user.orm_user)
-
             async def resolve_value(value):
                 if callable(value):
                     value = value(self)
@@ -127,21 +124,46 @@ class CreditsSpawner(Spawner):
                     value = await value
                 return value
 
+            if self.user.authenticator.refresh_pre_spawn:
+                auth_state = await self.user.get_auth_state()
+                auth_model = {
+                    "name": self.user.name,
+                    "groups": self.user.orm_user.groups,
+                    "admin": self.user.orm_user.admin,
+                    "auth_state": auth_state,
+                }
+                await self.user.authenticator.update_user_credit(auth_model)
+
             self._billing_interval = await resolve_value(self.billing_interval)
             self._billing_value = await resolve_value(self.billing_value)
-
-            user_credits = ORMUserCredits.get_user(
+            
+            credits_user = CreditsUser.get_user(
                 self.user.authenticator.db_session, self.user.name
             )
-            if not user_credits:
+            if not credits_user or not credits_user.credits_user_values:
                 raise CreditsException(
                     "No credit values available. Please re-login and try again."
                 )
-            available_balance = 0
-            proj_credits = user_credits.project
+            credits_user_values = None
+            for cuv in credits_user.credits_user_values:
+                match = self.user.authenticator.match_user_options(
+                    self.user_options, cuv.user_options or {}
+                )
+                self.log.debug(
+                    f"Test if spawner user_options {self.user_options} match configured user_options {cuv.user_options or {}} : {match}"
+                )
+                if match:
+                    credits_user_values = cuv
+                    break
+            
+            if credits_user_values is None:
+                raise CreditsException(
+                    "No matching credit values found for your selected options. Please adjust your options and try again."
+                )
+            available_balance = credits_user_values.balance
+            proj_credits = credits_user_values.project
             if proj_credits:
                 available_balance += proj_credits.balance
-            available_balance += user_credits.balance
 
             if available_balance < self._billing_value:
                 error_proj_msg = ""
@@ -150,7 +172,7 @@ class CreditsSpawner(Spawner):
                     error_proj_msg = f"<br>Current project ({proj_credits.name}) credits: {proj_credits.balance} / {proj_credits.cap}."
                     error_proj_msg_2 = f"<br>Your project ({proj_credits.name}) will receive {proj_credits.grant_value} credits every {proj_credits.grant_interval} seconds."
                 raise CreditsException(
-                    f"Not enough credits to start server '{self._log_name}'.<br>Required credits: {self._billing_value}.<br>Current User credits: {user_credits.balance} / {user_credits.cap}.{error_proj_msg}<br>You will receive {user_credits.grant_value} credits every {user_credits.grant_interval} seconds.{error_proj_msg_2}"
+                    f"Not enough credits to start server '{self._log_name}'.<br>Required credits: {self._billing_value}.<br>Current User credits: {credits_user_values.balance} / {credits_user_values.cap}.{error_proj_msg}<br>You will receive {credits_user_values.grant_value} credits every {credits_user_values.grant_interval} seconds.{error_proj_msg_2}"
                 )
 
         return super().run_pre_spawn_hook()

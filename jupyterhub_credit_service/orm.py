@@ -7,46 +7,66 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
-class ProjectCredits(Base):
+class CreditsProject(Base):
     """Table for storing per-project credits."""
 
-    __tablename__ = "project_credits"
+    __tablename__ = "credits_project"
 
     name = Column(Unicode, primary_key=True)
+
+    display_name = Column(Unicode)
     balance = Column(Integer, default=0)
     cap = Column(Integer, default=100)
     grant_value = Column(Integer, default=5)
     grant_interval = Column(Integer, default=300)
-    grant_last_update = Column(DateTime, default=datetime.now())
+    grant_last_update = Column(DateTime, default=datetime.now)
+    user_options = Column(MutableDict.as_mutable(JSON), default=dict, nullable=True)
 
-    users = relationship("UserCredits", back_populates="project")
+    # One project - many user values
+    credits_user_values = relationship("CreditsUserValues", back_populates="project")
 
     @classmethod
     def get_project(cls, db, project_name):
-        orm_project_credits = db.query(cls).filter(cls.name == project_name).first()
-        return orm_project_credits
+        return db.query(cls).filter(cls.name == project_name).first()
 
 
-class UserCredits(Base):
+class CreditsUser(Base):
     """Table for storing per-user credits."""
 
-    __tablename__ = "user_credits"
+    __tablename__ = "credits_user"
 
     name = Column(Unicode, primary_key=True)
+
+    spawner_bills = Column(MutableDict.as_mutable(JSON), default=dict)
+
+    # One user - many user values
+    credits_user_values = relationship("CreditsUserValues", back_populates="credits_user")
+
+    @classmethod
+    def get_user(cls, db, user_name):
+        return db.query(cls).filter(cls.name == user_name).first()
+
+
+class CreditsUserValues(Base):
+    """Table for storing per-user (+ per-project) credits."""
+
+    __tablename__ = "credits_user_values"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    name = Column(Unicode)
     balance = Column(Integer, default=0)
     cap = Column(Integer, default=100)
     grant_value = Column(Integer, default=5)
     grant_interval = Column(Integer, default=300)
-    grant_last_update = Column(DateTime, default=datetime.now())
-    spawner_bills = Column(MutableDict.as_mutable(JSON), default=dict)
+    grant_last_update = Column(DateTime, default=datetime.now)
+    user_options = Column(MutableDict.as_mutable(JSON), default=dict, nullable=True)
 
-    # Optional foreign key (nullable=True)
-    project_name = Column(Unicode, ForeignKey("project_credits.name"), nullable=True)
+    # Foreign keys
+    user_name = Column(Unicode, ForeignKey("credits_user.name"), nullable=False)
+    project_name = Column(Unicode, ForeignKey("credits_project.name"))
+    
 
-    # Many-to-one relationship
-    project = relationship("ProjectCredits", back_populates="users")
-
-    @classmethod
-    def get_user(cls, db, user_name):
-        orm_user_credits = db.query(cls).filter(cls.name == user_name).first()
-        return orm_user_credits
+    # Relationships
+    credits_user = relationship("CreditsUser", back_populates="credits_user_values")
+    project = relationship("CreditsProject", back_populates="credits_user_values")
