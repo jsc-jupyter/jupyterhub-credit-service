@@ -1,18 +1,17 @@
 import asyncio
-import inspect
 import fnmatch
+import inspect
 import os
 import re
 import time
 from datetime import datetime, timedelta
 
-from jupyterhub import orm
 from jupyterhub.auth import Authenticator
 from jupyterhub.orm import User as ORMUser
 from jupyterhub.utils import utcnow
 from traitlets import Any, Bool, Callable, Dict, Integer, List, Union
 
-from .orm import Base, CreditsUser, CreditsUserValues, CreditsProject
+from .orm import Base, CreditsProject, CreditsUser, CreditsUserValues
 
 
 class CreditsAuthenticator(Authenticator):
@@ -162,7 +161,6 @@ class CreditsAuthenticator(Authenticator):
                 await f
             self.log.info("Finished credits_task_post_hook")
 
-
     def credits_validate_and_update_project(self, _project):
         if not _project.get("name", None):
             self.log.warning(
@@ -218,17 +216,26 @@ class CreditsAuthenticator(Authenticator):
                 )
                 try:
                     if re.fullmatch(value, str(uo_value)) is None:
-                        self.log.debug(f"Pattern {value} does not match value {uo_value}.")
+                        self.log.debug(
+                            f"Pattern {value} does not match value {uo_value}."
+                        )
                         return False
                 except re.error:
                     try:
-                        if re.fullmatch(fnmatch.translate(value), str(uo_value)) is None:
-                            self.log.debug(f"Pattern {value} does not match value {uo_value}.")
+                        if (
+                            re.fullmatch(fnmatch.translate(value), str(uo_value))
+                            is None
+                        ):
+                            self.log.debug(
+                                f"Pattern {value} does not match value {uo_value}."
+                            )
                             return False
                     except re.error:
-                        self.log.warning(f"Invalid regex pattern {value} for user_option {key}. Check if strings are equal.")
+                        self.log.warning(
+                            f"Invalid regex pattern {value} for user_option {key}. Check if strings are equal."
+                        )
                         if uo_value != value:
-                            return False  
+                            return False
             elif type(value) in [int, float, bool]:
                 self.log.debug(
                     f"Check if spawner user_option {key} value {uo_value} equals configured value {value}"
@@ -283,7 +290,8 @@ class CreditsAuthenticator(Authenticator):
                                             proj_prev_balance + gained, proj_cap
                                         )
                                         credits.project.grant_last_update += timedelta(
-                                            seconds=grants * credits.project.grant_interval
+                                            seconds=grants
+                                            * credits.project.grant_interval
                                         )
                                         self.log.debug(
                                             f"Project {credits.project_name}: {proj_prev_balance} -> {credits.project.balance} "
@@ -306,7 +314,9 @@ class CreditsAuthenticator(Authenticator):
                                 credits.balance = cap
                                 updated = True
                             else:
-                                elapsed = (now - credits.grant_last_update).total_seconds()
+                                elapsed = (
+                                    now - credits.grant_last_update
+                                ).total_seconds()
                                 if elapsed >= credits.grant_interval:
                                     updated = True
                                     grants = int(elapsed // credits.grant_interval)
@@ -326,11 +336,12 @@ class CreditsAuthenticator(Authenticator):
                                     )
                             if updated:
                                 self.db_session.commit()
-                            
 
                             # All projects and user credits are updated.
                             # Now check running spawners and bill credits
-                            mem_user = self.user_credits_dict.get(credit_user.name, None)
+                            mem_user = self.user_credits_dict.get(
+                                credit_user.name, None
+                            )
                             if mem_user:
                                 to_stop = []
                                 for spawner in mem_user.spawners.values():
@@ -338,7 +349,7 @@ class CreditsAuthenticator(Authenticator):
                                         continue
                                     if not getattr(spawner, "_billing_value", None):
                                         continue
-                                        
+
                                     try:
                                         spawner_id_str = str(spawner.orm_spawner.id)
                                         if not spawner.active:
@@ -346,7 +357,9 @@ class CreditsAuthenticator(Authenticator):
                                                 spawner_id_str
                                                 in credit_user.spawner_bills.keys()
                                             ):
-                                                del credit_user.spawner_bills[spawner_id_str]
+                                                del credit_user.spawner_bills[
+                                                    spawner_id_str
+                                                ]
                                             continue
                                         if not spawner.ready:
                                             continue
@@ -354,13 +367,21 @@ class CreditsAuthenticator(Authenticator):
                                         # When restarting the Hub the last bill timestamp
                                         # will be stored in the database. Use this one.
                                         force_bill = False
-                                        if spawner_id_str in credit_user.spawner_bills.keys():
+                                        if (
+                                            spawner_id_str
+                                            in credit_user.spawner_bills.keys()
+                                        ):
                                             last_billed = datetime.fromisoformat(
-                                                credit_user.spawner_bills[spawner_id_str]
+                                                credit_user.spawner_bills[
+                                                    spawner_id_str
+                                                ]
                                             )
                                             # If the last bill timestamp is older than started, it's from
                                             # a previous running lab and should not be used.
-                                            if last_billed < spawner.orm_spawner.started:
+                                            if (
+                                                last_billed
+                                                < spawner.orm_spawner.started
+                                            ):
                                                 force_bill = True
                                                 last_billed = now
                                         else:
@@ -375,14 +396,17 @@ class CreditsAuthenticator(Authenticator):
                                             elapsed >= spawner._billing_interval
                                             or force_bill
                                         ):
-                                            user_options = getattr(spawner, "user_options", {})
+                                            user_options = getattr(
+                                                spawner, "user_options", {}
+                                            )
                                             # Find the correct CreditsUserValues and Project entry for this spawner
                                             user_credits_for_spawner = None
-                                            
+
                                             for cuv in credit_user.credits_user_values:
                                                 if user_credits_for_spawner is None:
                                                     match = self.match_user_options(
-                                                        user_options, cuv.user_options or {}
+                                                        user_options,
+                                                        cuv.user_options or {},
                                                     )
                                                     self.log.debug(
                                                         f"Test if spawner user_options {user_options} match configured user_options {cuv.user_options or {}} : {match}"
@@ -390,26 +414,45 @@ class CreditsAuthenticator(Authenticator):
                                                     if match:
                                                         user_credits_for_spawner = cuv
                                                         break
-                                            
+
                                             if not user_credits_for_spawner:
-                                                self.log.warning(f"No matching CreditsUserValues found for spawner {spawner._log_name}. Stop Spawner.")
+                                                self.log.warning(
+                                                    f"No matching CreditsUserValues found for spawner {spawner._log_name}. Stop Spawner."
+                                                )
                                                 to_stop.append(spawner.name)
                                                 continue
                                             available_balance = 0
                                             project_credits_for_spawner = None
-                                            self.log.debug(f"Using user credits '{user_credits_for_spawner.name}' for spawner {spawner._log_name}")
-                                            available_balance += user_credits_for_spawner.balance
-                                            prev_balance = user_credits_for_spawner.balance
+                                            self.log.debug(
+                                                f"Using user credits '{user_credits_for_spawner.name}' for spawner {spawner._log_name}"
+                                            )
+                                            available_balance += (
+                                                user_credits_for_spawner.balance
+                                            )
+                                            prev_balance = (
+                                                user_credits_for_spawner.balance
+                                            )
                                             if user_credits_for_spawner.project:
-                                                project_credits_for_spawner = user_credits_for_spawner.project
-                                                self.log.debug(f"Using project credits '{project_credits_for_spawner.name}' for spawner {spawner._log_name}")
-                                                available_balance += project_credits_for_spawner.balance
-                                                proj_prev_balance = project_credits_for_spawner.balance
-                                                
+                                                project_credits_for_spawner = (
+                                                    user_credits_for_spawner.project
+                                                )
+                                                self.log.debug(
+                                                    f"Using project credits '{project_credits_for_spawner.name}' for spawner {spawner._log_name}"
+                                                )
+                                                available_balance += (
+                                                    project_credits_for_spawner.balance
+                                                )
+                                                proj_prev_balance = (
+                                                    project_credits_for_spawner.balance
+                                                )
+
                                             # When force_bill is true we have to make sure to bill the first
                                             # interval as well
                                             bills = max(
-                                                int(elapsed // spawner._billing_interval), 1
+                                                int(
+                                                    elapsed // spawner._billing_interval
+                                                ),
+                                                1,
                                             )
                                             cost = bills * spawner._billing_value
                                             if cost > available_balance:
@@ -426,11 +469,18 @@ class CreditsAuthenticator(Authenticator):
                                                 )
                                             else:
                                                 if project_credits_for_spawner:
-                                                    if cost > project_credits_for_spawner.balance:
-                                                        proj_cost = project_credits_for_spawner.balance
+                                                    if (
+                                                        cost
+                                                        > project_credits_for_spawner.balance
+                                                    ):
+                                                        proj_cost = (
+                                                            project_credits_for_spawner.balance
+                                                        )
                                                     else:
                                                         proj_cost = cost
-                                                    project_credits_for_spawner.balance -= proj_cost
+                                                    project_credits_for_spawner.balance -= (
+                                                        proj_cost
+                                                    )
                                                     cost -= proj_cost
                                                     self.log.debug(
                                                         f"Project {project_credits_for_spawner.name} credits recuded by {proj_cost} ({proj_prev_balance} -> {project_credits_for_spawner.balance}) for server '{spawner._log_name}' ({elapsed}s since last bill timestamp)",
@@ -458,9 +508,9 @@ class CreditsAuthenticator(Authenticator):
                                                         "servername": spawner.name,
                                                     },
                                                 )
-                                                credit_user.spawner_bills[spawner_id_str] = (
-                                                    last_billed.isoformat()
-                                                )
+                                                credit_user.spawner_bills[
+                                                    spawner_id_str
+                                                ] = last_billed.isoformat()
                                                 self.db_session.commit()
                                     except:
                                         self.log.exception(
@@ -486,7 +536,6 @@ class CreditsAuthenticator(Authenticator):
                 await asyncio.sleep(0)  # give waiters time to proceed
                 self.credits_task_event.clear()
                 await asyncio.sleep(self.credits_task_interval)
-
 
     def credits_append_user(self, user):
         if user.name not in self.user_credits_dict.keys():
@@ -516,7 +565,7 @@ class CreditsAuthenticator(Authenticator):
         auth_state = auth_model.get("auth_state", {})
         user_groups = auth_model.get("groups", [])
         user_admin = auth_model.get("admin", False)
-        
+
         async def resolve_value(value):
             if callable(value):
                 value = value(user_name, user_groups, user_admin, auth_state)
@@ -532,23 +581,24 @@ class CreditsAuthenticator(Authenticator):
             credits_user_database = CreditsUser(name=user_name)
             self.db_session.add(credits_user_database)
             self.db_session.commit()
-        
+
         # Collect configured values
         credits_user_values_configured = await resolve_value(self.credits_user)
         if type(credits_user_values_configured) == dict:
             credits_user_values_configured = [credits_user_values_configured]
-            
+
         credits_user_values_configured_names = []
         credits_user_values_configured_by_name = {}
         if credits_user_values_configured:
             for x in credits_user_values_configured:
                 if "name" not in x.keys():
-                    self.log.warning(f"User Credit Configuration has no name. Use name default as placeholder.")
+                    self.log.warning(
+                        "User Credit Configuration has no name. Use name default as placeholder."
+                    )
                     x["name"] = "default"
                 credits_user_values_configured_names.append(x["name"])
                 credits_user_values_configured_by_name[x["name"]] = x
-        
-        
+
         # 1. Keep database entries that are currently configured
         for credits_user_value_db in credits_user_database.credits_user_values:
             if credits_user_value_db.name not in credits_user_values_configured_names:
@@ -557,14 +607,16 @@ class CreditsAuthenticator(Authenticator):
 
         for name, credits_user_value in credits_user_values_configured_by_name.items():
             # Does the configuration for the user exist in database, update it. Otherwise create it
-            
+
             orm_project = None
             configured_project = credits_user_value.get("project", None)
             if configured_project and configured_project.get("name", None):
                 project = self.credits_validate_and_update_project(configured_project)
                 if not project:
                     continue
-                orm_project = CreditsProject.get_project(self.db_session, configured_project["name"])
+                orm_project = CreditsProject.get_project(
+                    self.db_session, configured_project["name"]
+                )
 
                 if not orm_project:
                     # Create entry in database
@@ -593,15 +645,19 @@ class CreditsAuthenticator(Authenticator):
                     if proj_updated:
                         self.db_session.add(orm_project)
                         self.db_session.commit()
-                    
-            database_entry = CreditsUser.get_user(self.db_session, user_name).credits_user_values
+
+            database_entry = CreditsUser.get_user(
+                self.db_session, user_name
+            ).credits_user_values
             database_entry = [x for x in database_entry if x.name == name]
             if database_entry:
                 database_entry = database_entry[0]
                 database_entry.cap = credits_user_value.get("cap")
                 database_entry.grant_value = credits_user_value.get("grant_value")
                 database_entry.grant_interval = credits_user_value.get("grant_interval")
-                database_entry.user_options = credits_user_value.get("user_options", None)
+                database_entry.user_options = credits_user_value.get(
+                    "user_options", None
+                )
                 if database_entry.balance > database_entry.cap:
                     database_entry.balance = database_entry.cap
                 database_entry.project = orm_project
@@ -632,7 +688,7 @@ class CreditsAuthenticator(Authenticator):
                 auth_model["admin"] = orm_user.admin or False
             await self.update_user_credit(auth_model)
         return auth_model
-    
+
     async def add_user(self, user):
         super().add_user(user)
         if self.credits_enabled:

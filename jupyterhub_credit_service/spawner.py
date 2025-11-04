@@ -7,6 +7,7 @@ from traitlets import Any
 
 from .orm import CreditsUser
 
+
 class CreditsException(web.HTTPError):
     jupyterhub_html_message = None
 
@@ -117,6 +118,7 @@ class CreditsSpawner(Spawner):
 
     async def run_pre_spawn_hook(self):
         if self.user.authenticator.credits_enabled:
+
             async def resolve_value(value):
                 if callable(value):
                     value = value(self)
@@ -136,7 +138,7 @@ class CreditsSpawner(Spawner):
 
             self._billing_interval = await resolve_value(self.billing_interval)
             self._billing_value = await resolve_value(self.billing_value)
-            
+
             credits_user = CreditsUser.get_user(
                 self.user.authenticator.db_session, self.user.name
             )
@@ -155,7 +157,7 @@ class CreditsSpawner(Spawner):
                 if match:
                     credits_user_values = cuv
                     break
-            
+
             if credits_user_values is None:
                 raise CreditsException(
                     "No matching credit values found for your selected options. Please adjust your options and try again."

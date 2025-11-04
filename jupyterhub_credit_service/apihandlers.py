@@ -22,25 +22,29 @@ import json
 def get_model(credits_user):
     model = []
     for cuv in credits_user.credits_user_values:
-        model.append({
-            "name": cuv.name,
-            "balance": cuv.balance,
-            "cap": cuv.cap,
-            "grant_value": cuv.grant_value,
-            "grant_interval": cuv.grant_interval,
-            "grant_last_update": cuv.grant_last_update.isoformat(),
-        })
+        model.append(
+            {
+                "name": cuv.name,
+                "balance": cuv.balance,
+                "cap": cuv.cap,
+                "grant_value": cuv.grant_value,
+                "grant_interval": cuv.grant_interval,
+                "grant_last_update": cuv.grant_last_update.isoformat(),
+            }
+        )
         if cuv.project:
-            model[-1].update({
-                "project": {
-                    "name": cuv.project.name,
-                    "balance": cuv.project.balance,
-                    "cap": cuv.project.cap,
-                    "grant_value": cuv.project.grant_value,
-                    "grant_interval": cuv.project.grant_interval,
-                    "grant_last_update": cuv.project.grant_last_update.isoformat(),
+            model[-1].update(
+                {
+                    "project": {
+                        "name": cuv.project.name,
+                        "balance": cuv.project.balance,
+                        "cap": cuv.project.cap,
+                        "grant_value": cuv.project.grant_value,
+                        "grant_interval": cuv.project.grant_interval,
+                        "grant_last_update": cuv.project.grant_last_update.isoformat(),
+                    }
                 }
-            })
+            )
     return model
 
 
@@ -86,13 +90,13 @@ class CreditsSSEAPIHandler(APIHandler):
 
     async def event_handler(self, user):
         user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
-        
+
         while (
             type(self._finish_future) is asyncio.Future
             and not self._finish_future.done()
         ):
             user.authenticator.db_session.refresh(user_credits)
-            model_credits = get_model(user_credits)            
+            model_credits = get_model(user_credits)
             try:
                 yield model_credits
             except GeneratorExit as e:
@@ -156,7 +160,9 @@ class CreditsUserAPIHandler(APIHandler):
             # Create entry for user with default values
             raise HTTPError(404, "No credit entry found for user")
         balance = cap = grant_value = grant_interval = None
-        project_balance = project_cap = project_grant_value = project_grant_interval = None
+        project_balance = project_cap = project_grant_value = project_grant_interval = (
+            None
+        )
         credits_user_values = None
         for cuv in credits_user.credits_user_values:
             if cuv.name == credit_name:
@@ -180,7 +186,8 @@ class CreditsUserAPIHandler(APIHandler):
             )
         if balance and balance > credits_user_values.cap:
             raise HTTPError(
-                400, f"Balance can't be bigger than cap ({balance} / {credits_user_values.cap})"
+                400,
+                f"Balance can't be bigger than cap ({balance} / {credits_user_values.cap})",
             )
         if balance and balance < 0:
             raise HTTPError(400, "Balance can't be negative")
@@ -209,16 +216,23 @@ class CreditsUserAPIHandler(APIHandler):
             if project_grant_value and prev_project_grant_value != project_grant_value:
                 proj_updated = True
                 credits_user_values.project.grant_value = project_grant_value
-            if project_grant_interval and prev_project_grant_interval != project_grant_interval:
+            if (
+                project_grant_interval
+                and prev_project_grant_interval != project_grant_interval
+            ):
                 proj_updated = True
                 credits_user_values.project.grant_interval = project_grant_interval
             if proj_updated:
                 user.authenticator.db_session.add(credits_user_values.project)
-                user.authenticator.db_session.commit()        
+                user.authenticator.db_session.commit()
         elif project and not credits_user_values.project:
-            _project = user.authenticator.credits_validate_and_update_project(credits_user_values)
+            _project = user.authenticator.credits_validate_and_update_project(
+                credits_user_values
+            )
             if not _project:
-                self.log.error(f"Failed to validate and update project: {credits_user_values}")
+                self.log.error(
+                    f"Failed to validate and update project: {credits_user_values}"
+                )
                 self.set_status(400)
                 return
             else:
@@ -245,7 +259,9 @@ class CreditsProjectAPIHandler(APIHandler):
         grant_value = data.get("grant_value", None)
         grant_interval = data.get("grant_interval", None)
 
-        project = CreditsProject.get_project(self.current_user.authenticator.db_session, project_name)
+        project = CreditsProject.get_project(
+            self.current_user.authenticator.db_session, project_name
+        )
 
         if not project:
             raise HTTPError(404, f"Unknown project {project_name}.")

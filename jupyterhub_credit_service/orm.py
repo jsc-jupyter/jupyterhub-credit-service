@@ -40,7 +40,9 @@ class CreditsUser(Base):
     spawner_bills = Column(MutableDict.as_mutable(JSON), default=dict)
 
     # One user - many user values
-    credits_user_values = relationship("CreditsUserValues", back_populates="credits_user")
+    credits_user_values = relationship(
+        "CreditsUserValues", back_populates="credits_user"
+    )
 
     @classmethod
     def get_user(cls, db, user_name):
@@ -65,7 +67,6 @@ class CreditsUserValues(Base):
     # Foreign keys
     user_name = Column(Unicode, ForeignKey("credits_user.name"), nullable=False)
     project_name = Column(Unicode, ForeignKey("credits_project.name"))
-    
 
     # Relationships
     credits_user = relationship("CreditsUser", back_populates="credits_user_values")

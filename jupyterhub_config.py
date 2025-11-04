@@ -28,43 +28,43 @@ c.JupyterHub.log_level = 10
 
 def credits_user(user_name, user_groups, is_admin, auth_state):
     if user_name == "e":
-        return [{
-            "cap": 150,
+        return [
+            {
+                "cap": 150,
+                "grant_interval": 30,
+                "grant_value": 20,
+            },
+            {
+                "name": "SystemX",
+                "cap": 150,
+                "grant_interval": 30,
+                "grant_value": 20,
+                "user_options": {"system": "X"},
+                "project": {
+                    "name": "ProjectX",
+                    "cap": 500,
+                    "grant_interval": 60,
+                    "grant_value": 50,
+                },
+            },
+        ]
+    return [
+        {
+            "name": "SystemA",
+            "cap": 1500,
             "grant_interval": 30,
             "grant_value": 20,
-        }, {
-            "name": "SystemX",
-            "cap": 150,
+            "user_options": {"system": "A"},
+        },
+        {
+            "name": "SystemB",
+            "cap": 1500,
             "grant_interval": 30,
             "grant_value": 20,
-            "user_options": {
-                "system": "X"
-            },
-            "project": {
-                "name": "ProjectX",
-                "cap": 500,
-                "grant_interval": 60,
-                "grant_value": 50,
-            },
-        }
+            "user_options": {"system": "B"},
+        },
     ]
-    return [{
-        "name": "SystemA",
-        "cap": 1500,
-        "grant_interval": 30,
-        "grant_value": 20,
-        "user_options": {
-            "system": "A"
-        },
-    }, {
-        "name": "SystemB",
-        "cap": 1500,
-        "grant_interval": 30,
-        "grant_value": 20,
-        "user_options": {
-            "system": "B"
-        },
-    }]
+
 
 c.DummyCreditsAuthenticator.admin_users = ["admin"]
 c.DummyCreditsAuthenticator.credits_user = credits_user
@@ -72,8 +72,6 @@ c.DummyCreditsAuthenticator.credits_task_interval = 5
 
 
 def get_billing_value(spawner):
-    values = {"normal": 10, "power": 20}
-    mode = spawner.user_options.get("mode", [None])[0]
     return 110
 
 

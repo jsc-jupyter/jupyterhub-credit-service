@@ -62,6 +62,7 @@ class MockCreditsSpawner(MockSpawner, CreditsSpawner):
     billing_interval = 10
     billing_value = 10
 
+
 class MockCreditsAuthenticator(MockPAMAuthenticator, CreditsAuthenticator):
     parent = MockHub()
     credits_task_interval = 1
@@ -111,20 +112,21 @@ def ssl_tmpdir(tmpdir_factory):
     return tmpdir_factory.mktemp("ssl")
 
 
-@fixture(scope='module')
+@fixture(scope="module")
 async def app(request, io_loop, ssl_tmpdir):
     """Mock a jupyterhub app for testing"""
     mocked_app = None
     ssl_enabled = getattr(
-        request.module, 'ssl_enabled', os.environ.get('SSL_ENABLED', False)
+        request.module, "ssl_enabled", os.environ.get("SSL_ENABLED", False)
     )
     kwargs = dict()
-    if ssl_enabled: 
+    if ssl_enabled:
         kwargs.update(dict(internal_ssl=True, internal_certs_location=str(ssl_tmpdir)))
 
     mocked_app = MockHub.instance(**kwargs)
     mocked_app.authenticator_class = MockCreditsAuthenticator
     mocked_app.spawner_class = MockCreditsSpawner
+
     def fin():
         # disconnect logging during cleanup because pytest closes captured FDs prematurely
         mocked_app.log.handlers = []
@@ -138,6 +140,7 @@ async def app(request, io_loop, ssl_tmpdir):
     await mocked_app.initialize([])
     await mocked_app.start()
     return mocked_app
+
 
 @fixture
 def auth_state_enabled(app):
@@ -159,17 +162,18 @@ def db():
     """Get a db session"""
     # make sure some initial db contents are filled out
     # specifically, the 'default' jupyterhub oauth client
-    app = MockHub(db_url='sqlite:///:memory:')
+    app = MockHub(db_url="sqlite:///:memory:")
     app.init_db()
     _db = app.db
     for role in get_default_roles():
-        create_role(_db, role) 
+        create_role(_db, role)
     user = orm.User(name="user")
     _db.add(user)
     _db.commit()
     assign_default_roles(_db, user)
     _db.commit()
     return _db
+
 
 @fixture(scope="module")
 async def io_loop(request):
