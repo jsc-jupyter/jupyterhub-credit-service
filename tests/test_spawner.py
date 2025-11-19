@@ -273,7 +273,7 @@ async def test_spawner_proj_billed(db, app, user):
         "grant_value": 60,
     }
 
-    def user_credits(username, *args):
+    def user_credits(_, username, *args):
         ret = copy.deepcopy(user_credits_simple)
         if username == user.name:
             ret["project"] = proj_values
@@ -363,7 +363,7 @@ async def test_spawner_proj_billed_partly(db, app, user):
         "grant_value": 60,
     }
 
-    def user_credits(username, *args):
+    def user_credits(_, username, *args):
         ret = copy.deepcopy(user_credits_simple)
         if username == user.name:
             ret["project"] = proj_values
@@ -423,7 +423,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
         "grant_value": 60,
     }
 
-    def user_credits(username, *args):
+    def user_credits(_, username, *args):
         ret = copy.deepcopy(user_credits_simple)
         if username == user.name:
             ret["project"] = proj_values
@@ -631,7 +631,7 @@ async def test_spawner_proj_to_expensive(db, app, user):
         "grant_value": 60,
     }
 
-    def user_credits(username, *args):
+    def user_credits(_, username, *args):
         ret = copy.deepcopy(user_credits_simple)
         if username == user.name:
             ret["project"] = proj_values
@@ -675,7 +675,7 @@ async def test_spawner_proj_costs_more_than_usercredit(db, app, user):
         "grant_value": 60,
     }
 
-    def user_credits(username, *args):
+    def user_credits(_, username, *args):
         ret = copy.deepcopy(user_credits_simple)
         if username == user.name:
             ret["project"] = proj_values

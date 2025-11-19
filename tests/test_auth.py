@@ -15,20 +15,20 @@ user_credits_simple = {
 }
 
 
-def user_credits_simple_function(username, groups, is_admin, auth_state):
+def user_credits_simple_function(_, username, groups, is_admin, auth_state):
     return user_credits_simple
 
 
-def user_credits_simple_function_list(username, groups, is_admin, auth_state):
+def user_credits_simple_function_list(_, username, groups, is_admin, auth_state):
     return [user_credits_simple]
 
 
-async def async_user_credits_simple_function(username, groups, is_admin, auth_state):
+async def async_user_credits_simple_function(_, username, groups, is_admin, auth_state):
     return user_credits_simple
 
 
 async def async_user_credits_simple_function_list(
-    username, groups, is_admin, auth_state
+    _, username, groups, is_admin, auth_state
 ):
     return [user_credits_simple]
 
@@ -371,7 +371,7 @@ async def test_credits_user_simple_asyncfunc_list(app, user):
 async def test_credits_user_function_admin(app, user, admin_user):
     admin_added_cap = 150
 
-    def user_credits_simple_function(username, groups, is_admin, auth_state):
+    def user_credits_simple_function(_, username, groups, is_admin, auth_state):
         ret = copy.deepcopy(user_credits_simple)
         if is_admin:
             ret["cap"] += admin_added_cap
@@ -397,9 +397,9 @@ async def test_credits_user_function_group(app, users, group):
     app.db.commit()
     group_added_cap = 7
 
-    def user_credits_simple_function(username, groups, is_admin, auth_state):
+    def user_credits_simple_function(_, username, groups, is_admin, auth_state):
         ret = copy.deepcopy(user_credits_simple)
-        if group.name in [g.name for g in groups]:
+        if group.name in groups:
             ret["cap"] += group_added_cap
         return ret
 
@@ -421,7 +421,7 @@ async def test_credits_user_function_username_async(app, users):
     user1, user2 = users
     user1_added_cap = 25
 
-    def user_credits_simple_function(username, groups, is_admin, auth_state):
+    def user_credits_simple_function(_, username, groups, is_admin, auth_state):
         ret = copy.deepcopy(user_credits_simple)
         if username == user1.name:
             ret["cap"] += user1_added_cap
@@ -445,7 +445,7 @@ async def test_credits_available_projects_user_project(app, users):
 
     user1, user2 = users
 
-    def user_credits(username, groups, is_admin, auth_state):
+    def user_credits(_, username, groups, is_admin, auth_state):
         ret = copy.deepcopy(user_credits_simple)
         if username == user1.name:
             ret["project"] = {
@@ -479,7 +479,9 @@ async def test_credits_available_projects_user_project(app, users):
 async def test_credits_available_projects_user_project_add_entry(app, user):
     return_all = False
 
-    async def async_user_credits_runtime_change(username, groups, is_admin, auth_state):
+    async def async_user_credits_runtime_change(
+        _, username, groups, is_admin, auth_state
+    ):
         if return_all:
             return user_credits_multiple_w_default
         else:
@@ -508,7 +510,9 @@ async def test_credits_available_projects_user_project_add_entry(app, user):
 async def test_credits_available_projects_user_project_del_entry(app, user):
     return_all = True
 
-    async def async_user_credits_runtime_change(username, groups, is_admin, auth_state):
+    async def async_user_credits_runtime_change(
+        _, username, groups, is_admin, auth_state
+    ):
         if return_all:
             return user_credits_multiple_wo_default
         else:

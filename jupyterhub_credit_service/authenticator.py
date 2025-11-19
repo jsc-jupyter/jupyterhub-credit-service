@@ -568,7 +568,7 @@ class CreditsAuthenticator(Authenticator):
 
         async def resolve_value(value):
             if callable(value):
-                value = value(user_name, user_groups, user_admin, auth_state)
+                value = value(self, user_name, user_groups, user_admin, auth_state)
             if inspect.isawaitable(value):
                 value = await value
             return value
@@ -684,7 +684,9 @@ class CreditsAuthenticator(Authenticator):
             # If it's a new user there won't be an entry.
             # This case will be handled in .add_user()
             if orm_user:
-                auth_model["groups"] = orm_user.groups or []
+                if "groups" not in auth_model:
+                    groups = [x.name for x in orm_user.groups]
+                    auth_model["groups"] = groups
                 auth_model["admin"] = orm_user.admin or False
             await self.update_user_credit(auth_model)
         return auth_model

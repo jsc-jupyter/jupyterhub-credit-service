@@ -48,7 +48,7 @@ async def test_credits_auth_proj(app, user):
     local_user_credits_simple_project = copy.deepcopy(user_credits_simple_project)
     local_user_credits_simple_project["project"]["name"] = proj_name
 
-    def user_credits_f(username, *args):
+    def user_credits_f(_, username, *args):
         if username == user.name:
             return local_user_credits_simple_project
         return user_credits_simple
@@ -133,7 +133,7 @@ async def test_credits_admin_proj_update(app, user):
     local_user_credits_simple_project = copy.deepcopy(user_credits_simple_project)
     local_user_credits_simple_project["project"]["name"] = proj_name
 
-    def user_credits_f(username, *args):
+    def user_credits_f(_, username, *args):
         if username == user.name:
             return local_user_credits_simple_project
         return user_credits_simple
@@ -165,7 +165,7 @@ async def test_credits_admin_proj_403(app, user):
     local_user_credits_simple_project = copy.deepcopy(user_credits_simple_project)
     local_user_credits_simple_project["project"]["name"] = proj_name
 
-    def user_credits_f(username, *args):
+    def user_credits_f(_, username, *args):
         if username == user.name:
             return local_user_credits_simple_project
         return user_credits_simple
