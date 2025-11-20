@@ -139,43 +139,44 @@ class CreditsSpawner(Spawner):
             self._billing_interval = await resolve_value(self.billing_interval)
             self._billing_value = await resolve_value(self.billing_value)
 
-            credits_user = CreditsUser.get_user(
-                self.user.authenticator.db_session, self.user.name
-            )
-            if not credits_user or not credits_user.credits_user_values:
-                raise CreditsException(
-                    "No credit values available. Please re-login and try again."
+            if self._billing_value > 0:
+                credits_user = CreditsUser.get_user(
+                    self.user.authenticator.db_session, self.user.name
                 )
-            credits_user_values = None
-            for cuv in credits_user.credits_user_values:
-                match = self.user.authenticator.match_user_options(
-                    self.user_options, cuv.user_options or {}
-                )
-                self.log.debug(
-                    f"Test if spawner user_options {self.user_options} match configured user_options {cuv.user_options or {}} : {match}"
-                )
-                if match:
-                    credits_user_values = cuv
-                    break
+                if not credits_user or not credits_user.credits_user_values:
+                    raise CreditsException(
+                        "No credit values available. Please re-login and try again."
+                    )
+                credits_user_values = None
+                for cuv in credits_user.credits_user_values:
+                    match = self.user.authenticator.match_user_options(
+                        self.user_options, cuv.user_options or {}
+                    )
+                    self.log.debug(
+                        f"Test if spawner user_options {self.user_options} match configured user_options {cuv.user_options or {}} : {match}"
+                    )
+                    if match:
+                        credits_user_values = cuv
+                        break
 
-            if credits_user_values is None:
-                raise CreditsException(
-                    "No matching credit values found for your selected options. Please adjust your options and try again."
-                )
-            available_balance = credits_user_values.balance
-            proj_credits = credits_user_values.project
-            if proj_credits:
-                available_balance += proj_credits.balance
-
-            if available_balance < self._billing_value:
-                error_proj_msg = ""
-                error_proj_msg_2 = ""
+                if credits_user_values is None:
+                    raise CreditsException(
+                        "No matching credit values found for your selected options. Please adjust your options and try again."
+                    )
+                available_balance = credits_user_values.balance
+                proj_credits = credits_user_values.project
                 if proj_credits:
-                    error_proj_msg = f"<br>Current project ({proj_credits.name}) credits: {proj_credits.balance} / {proj_credits.cap}."
-                    error_proj_msg_2 = f"<br>Your project ({proj_credits.name}) will receive {proj_credits.grant_value} credits every {proj_credits.grant_interval} seconds."
-                raise CreditsException(
-                    f"Not enough credits to start server '{self._log_name}'.<br>Required credits: {self._billing_value}.<br>Current User credits: {credits_user_values.balance} / {credits_user_values.cap}.{error_proj_msg}<br>You will receive {credits_user_values.grant_value} credits every {credits_user_values.grant_interval} seconds.{error_proj_msg_2}"
-                )
+                    available_balance += proj_credits.balance
+
+                if available_balance < self._billing_value:
+                    error_proj_msg = ""
+                    error_proj_msg_2 = ""
+                    if proj_credits:
+                        error_proj_msg = f"<br>Current project ({proj_credits.name}) credits: {proj_credits.balance} / {proj_credits.cap}."
+                        error_proj_msg_2 = f"<br>Your project ({proj_credits.name}) will receive {proj_credits.grant_value} credits every {proj_credits.grant_interval} seconds."
+                    raise CreditsException(
+                        f"Not enough credits to start server '{self._log_name}'.<br>Required credits: {self._billing_value}.<br>Current User credits: {credits_user_values.balance} / {credits_user_values.cap}.{error_proj_msg}<br>You will receive {credits_user_values.grant_value} credits every {credits_user_values.grant_interval} seconds.{error_proj_msg_2}"
+                    )
 
         result = super().run_pre_spawn_hook()
         await gen.maybe_future(result)
