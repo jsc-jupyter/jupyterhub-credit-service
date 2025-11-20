@@ -154,12 +154,9 @@ class CreditsAuthenticator(Authenticator):
 
     async def run_credits_task_post_hook(self):
         if self.credits_task_post_hook:
-            self.log.info("Running credits_task_post_hook")
             f = self.credits_task_post_hook()
             if inspect.isawaitable(f):
-                self.log.info("Awaiting credits_task_post_hook")
                 await f
-            self.log.info("Finished credits_task_post_hook")
 
     def credits_validate_and_update_project(self, _project):
         if not _project.get("name", None):
