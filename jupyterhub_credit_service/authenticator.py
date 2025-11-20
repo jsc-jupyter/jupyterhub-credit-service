@@ -419,7 +419,8 @@ class CreditsAuthenticator(Authenticator):
                                                 self.log.warning(
                                                     f"No matching CreditsUserValues found for spawner {spawner._log_name}. Stop Spawner."
                                                 )
-                                                to_stop.append(spawner.name)
+                                                if spawner.name not in to_stop:
+                                                    to_stop.append(spawner.name)
                                                 continue
                                             available_balance = 0
                                             project_credits_for_spawner = None
@@ -457,7 +458,8 @@ class CreditsAuthenticator(Authenticator):
                                             cost = bills * spawner._billing_value
                                             if cost > available_balance:
                                                 # Stop Server. Not enough credits left for next interval
-                                                to_stop.append(spawner.name)
+                                                if spawner.name not in to_stop:
+                                                    to_stop.append(spawner.name)
                                                 self.log.info(
                                                     f"User Credits exceeded. Stopping Server '{mem_user.name}:{spawner.name}' (Credits available: {available_balance}, Cost: {cost})",
                                                     extra={
@@ -518,6 +520,9 @@ class CreditsAuthenticator(Authenticator):
                                         )
 
                                 for spawner_name in to_stop:
+                                    self.log.info(
+                                        f"Stopping spawner {spawner_name} for user {mem_user.name} due to insufficient credits."
+                                    )
                                     asyncio.create_task(mem_user.stop(spawner_name))
                         except:
                             self.log.exception(
@@ -690,9 +695,3 @@ class CreditsAuthenticator(Authenticator):
                 auth_model["admin"] = orm_user.admin or False
             await self.update_user_credit(auth_model)
         return auth_model
-
-    async def add_user(self, user):
-        super().add_user(user)
-        if self.credits_enabled:
-            pass
-            # await self.update_user_credit(getattr(user, "orm_user", user))

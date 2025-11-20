@@ -130,7 +130,7 @@ class CreditsSpawner(Spawner):
                 auth_state = await self.user.get_auth_state()
                 auth_model = {
                     "name": self.user.name,
-                    "groups": self.user.orm_user.groups,
+                    "groups": [x.name for x in self.user.orm_user.groups],
                     "admin": self.user.orm_user.admin,
                     "auth_state": auth_state,
                 }
