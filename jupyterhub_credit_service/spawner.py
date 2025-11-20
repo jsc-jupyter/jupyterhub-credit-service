@@ -2,7 +2,7 @@ import inspect
 import os
 
 from jupyterhub.spawner import Spawner
-from tornado import web
+from tornado import gen, web
 from traitlets import Any
 
 from .orm import CreditsUser
@@ -177,7 +177,9 @@ class CreditsSpawner(Spawner):
                     f"Not enough credits to start server '{self._log_name}'.<br>Required credits: {self._billing_value}.<br>Current User credits: {credits_user_values.balance} / {credits_user_values.cap}.{error_proj_msg}<br>You will receive {credits_user_values.grant_value} credits every {credits_user_values.grant_interval} seconds.{error_proj_msg_2}"
                 )
 
-        return super().run_pre_spawn_hook()
+        result = super().run_pre_spawn_hook()
+        await gen.maybe_future(result)
+        return result
 
     async def start(self):
         _start = super().start()

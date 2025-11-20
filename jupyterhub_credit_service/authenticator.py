@@ -551,15 +551,26 @@ class CreditsAuthenticator(Authenticator):
         if self.credits_enabled:
             self.credits_task_event = asyncio.Event()
             hub = self.parent
-            # session_factory = orm.new_session_factory(
-            #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
-            # )
+            from jupyterhub import orm
 
-            self.db_session = hub.db
+            session_factory = orm.new_session_factory(
+                hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
+            )
+            self.db_session = session_factory()
             from sqlalchemy import create_engine
 
             engine = create_engine(hub.db_url)
             Base.metadata.create_all(engine)
+            # hub = self.parent
+            # # session_factory = orm.new_session_factory(
+            # #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
+            # # )
+
+            # self.db_session = hub.db
+            # from sqlalchemy import create_engine
+
+            # engine = create_engine(hub.db_url)
+            # Base.metadata.create_all(engine)
             self.credits_task = asyncio.create_task(self.credit_reconciliation_task())
 
     async def update_user_credit(self, auth_model):
@@ -695,3 +706,9 @@ class CreditsAuthenticator(Authenticator):
                 auth_model["admin"] = orm_user.admin or False
             await self.update_user_credit(auth_model)
         return auth_model
+
+    async def add_user(self, user):
+        super().add_user(user)
+        if self.credits_enabled:
+            pass
+            # await self.update_user_credit(getattr(user, "orm_user", user))
