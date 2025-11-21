@@ -4,6 +4,7 @@ from jupyterhub.handlers import default_handlers
 
 from .apihandlers import (
     CreditsAPIHandler,
+    CreditsAPIHealthHandler,
     CreditsProjectAPIHandler,
     CreditsSSEAPIHandler,
     CreditsSSEServerAPIHandler,
@@ -16,6 +17,7 @@ from .spawner import CreditsSpawner  # noqa: F401
 template_paths = [str(Path(__path__[0]) / "templates")]
 
 default_handlers.append((r"/api/credits", CreditsAPIHandler))
+default_handlers.append((r"/api/credits/health", CreditsAPIHealthHandler))
 default_handlers.append((r"/api/credits/sse", CreditsSSEAPIHandler))
 default_handlers.append((r"/api/credits/sseserver/([^/]+)", CreditsSSEServerAPIHandler))
 default_handlers.append(

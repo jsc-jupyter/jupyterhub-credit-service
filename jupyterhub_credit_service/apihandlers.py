@@ -260,6 +260,12 @@ class CreditsStopServerAPIHandler(UserServerAPIHandler):
         self.set_status(status)
 
 
+class CreditsAPIHealthHandler(APIHandler):
+    @authenticated
+    async def get(self):
+        self.write(json.dumps({"status": "ok"}))
+
+
 class CreditsAPIHandler(APIHandler):
     @authenticated
     async def get(self):
