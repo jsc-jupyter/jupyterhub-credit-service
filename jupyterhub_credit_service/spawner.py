@@ -10,6 +10,7 @@ from .orm import CreditsUser
 
 class CreditsException(web.HTTPError):
     jupyterhub_html_message = None
+    headers = {"Content-Type": "text/html"}
 
     def __init__(self, log_msg):
         super().__init__(403, log_msg)

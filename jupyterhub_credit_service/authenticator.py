@@ -398,8 +398,11 @@ class CreditsAuthenticator(Authenticator):
                                             )
                                             # Find the correct CreditsUserValues and Project entry for this spawner
                                             user_credits_for_spawner = None
-
+                                            default_cuv = None
                                             for cuv in credit_user.credits_user_values:
+                                                if not cuv.user_options:
+                                                    default_cuv = cuv
+                                                    continue
                                                 if user_credits_for_spawner is None:
                                                     match = self.match_user_options(
                                                         user_options,
@@ -412,6 +415,8 @@ class CreditsAuthenticator(Authenticator):
                                                         user_credits_for_spawner = cuv
                                                         break
 
+                                            if user_credits_for_spawner is None:
+                                                user_credits_for_spawner = default_cuv
                                             if not user_credits_for_spawner:
                                                 self.log.warning(
                                                     f"No matching CreditsUserValues found for spawner {spawner._log_name}. Stop Spawner."

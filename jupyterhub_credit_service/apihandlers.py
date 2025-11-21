@@ -51,6 +51,9 @@ def get_model(credits_user):
 class CreditsSSEAPIHandler(APIHandler):
     """EventStream handler to update UserCredits in Frontend"""
 
+    def check_xsrf_cookie(self):
+        pass
+
     keepalive_interval = 8
     keepalive_task = None
 
@@ -125,6 +128,136 @@ class CreditsSSEAPIHandler(APIHandler):
             pass
         except asyncio.exceptions.CancelledError:
             pass
+
+
+class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
+    """EventStream handler to update UserCredits in Frontend for one specific server"""
+
+    async def event_handler(self, user, user_options):
+        user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        credits_user_values = None
+        default_cuv = None
+        for cuv in user_credits.credits_user_values:
+            if not cuv.user_options:
+                default_cuv = cuv
+                continue
+            match = user.authenticator.match_user_options(
+                user_options, cuv.user_options or {}
+            )
+            if match:
+                credits_user_values = cuv
+                break
+        if credits_user_values is None:
+            credits_user_values = default_cuv
+        if credits_user_values is None:
+            raise Exception(
+                "No matching credit values found for server. Please adjust your options and try again."
+            )
+        while (
+            type(self._finish_future) is asyncio.Future
+            and not self._finish_future.done()
+        ):
+            user.authenticator.db_session.refresh(credits_user_values)
+            model_credits = {
+                "balance": credits_user_values.balance,
+                "cap": credits_user_values.cap,
+            }
+            if credits_user_values.project:
+                user.authenticator.db_session.refresh(credits_user_values.project)
+                model_credits["project"] = {
+                    "name": credits_user_values.project.name,
+                    "balance": credits_user_values.project.balance,
+                    "cap": credits_user_values.project.cap,
+                }
+            try:
+                yield model_credits
+            except GeneratorExit as e:
+                raise e
+            await user.authenticator.credits_task_event.wait()
+
+    @needs_scope("read:servers")
+    async def get(self, user_name, server_name=None):
+        self.set_header("Cache-Control", "no-cache")
+        if server_name is None:
+            server_name = ""
+        user = self.find_user(user_name)
+        if user is None:
+            # no such user
+            raise web.HTTPError(404)
+        if server_name not in user.spawners:
+            # user has no such server
+            raise web.HTTPError(404)
+        spawner = user.spawners[server_name]
+        user_options = spawner.user_options
+
+        # start sending keepalive to avoid proxies closing the connection
+        # This task will be finished / done, once the tab in the browser is closed
+        self.keepalive_task = asyncio.create_task(self.keepalive())
+
+        try:
+            async with aclosing(
+                iterate_until(
+                    self.keepalive_task, self.event_handler(user, user_options)
+                )
+            ) as events:
+                async for event in events:
+                    if event:
+                        await self.send_event(event)
+                    else:
+                        break
+        except RuntimeError:
+            pass
+        except asyncio.exceptions.CancelledError:
+            pass
+
+
+from jupyterhub.apihandlers.users import UserServerAPIHandler
+
+
+class CreditsStopServerAPIHandler(UserServerAPIHandler):
+    @needs_scope("access:servers")
+    async def delete(self, user_name, server_name=""):
+        user = self.find_user(user_name)
+
+        if server_name:
+            if server_name not in user.orm_spawners:
+                raise web.HTTPError(
+                    404, f"{user_name} has no server named '{server_name}'"
+                )
+        spawner = user.spawners[server_name]
+        self.log.info(
+            f"{spawner._log_name} - Stopping server '{server_name}' for user '{user_name}' per API request due to JupyterLab Credits topbar extension."
+        )
+        if spawner.pending == "stop":
+            self.log.debug("%s already stopping", spawner._log_name)
+            self.set_header("Content-Type", "text/plain")
+            self.set_status(202)
+            return
+
+        # stop_future = None
+        if spawner.pending:
+            # we are interrupting a pending start
+            # hopefully nothing gets leftover
+            self.log.warning(
+                f"Interrupting spawner {spawner._log_name}, pending {spawner.pending}"
+            )
+            spawn_future = spawner._spawn_future
+            if spawn_future:
+                spawn_future.cancel()
+            # Give cancel a chance to resolve?
+            # not sure what we would wait for here,
+            # await asyncio.sleep(1)
+            asyncio.create_task(self.stop_single_user(user, server_name))
+
+        elif spawner.ready:
+            # include notify, so that a server that died is noticed immediately
+            status = await spawner.poll_and_notify()
+            if status is None:
+                asyncio.create_task(self.stop_single_user(user, server_name))
+
+        status = 202 if spawner._stop_pending else 204
+        self.set_header("Content-Type", "text/plain")
+        self.set_status(status)
 
 
 class CreditsAPIHandler(APIHandler):
