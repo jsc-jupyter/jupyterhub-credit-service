@@ -98,7 +98,7 @@ asyncio_mode = "auto"
 github_url = "https://github.com/jsc-jupyter/jupyterhub-credit-service"
 
 [tool.tbump.version]
-current = "0.3.1"
+current = "0.3.2"
 regex = '''
     (?P<major>\d+)
     \.
