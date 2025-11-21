@@ -24,25 +24,26 @@ c.JupyterHub.authenticator_class = DummyCreditsAuthenticator
 c.JupyterHub.spawner_class = SimpleLocalProcessCreditsSpawner
 
 c.JupyterHub.log_level = 10
+c.JupyterHub.allow_named_servers = True
 
 
-def credits_user(user_name, user_groups, is_admin, auth_state):
+def credits_user(auth, user_name, user_groups, is_admin, auth_state):
     if user_name == "e":
         return [
             {
-                "cap": 150,
+                "cap": 1200,
                 "grant_interval": 30,
                 "grant_value": 20,
             },
             {
-                "name": "SystemX",
-                "cap": 150,
+                "name": "SystemB",
+                "cap": 1800,
                 "grant_interval": 30,
                 "grant_value": 20,
-                "user_options": {"system": "X"},
+                "user_options": {"system": "B"},
                 "project": {
-                    "name": "ProjectX",
-                    "cap": 500,
+                    "name": "Project0",
+                    "cap": 5200,
                     "grant_interval": 60,
                     "grant_value": 50,
                 },
@@ -51,7 +52,7 @@ def credits_user(user_name, user_groups, is_admin, auth_state):
     return [
         {
             "name": "SystemA",
-            "cap": 1500,
+            "cap": 1400,
             "grant_interval": 30,
             "grant_value": 20,
             "user_options": {"system": "A"},
@@ -72,7 +73,8 @@ c.DummyCreditsAuthenticator.credits_task_interval = 5
 
 
 def get_billing_value(spawner):
-    return 110
+    spawner.log.info(spawner.user_options)
+    return 50
 
 
 c.SimpleLocalProcessCreditsSpawner.billing_value = get_billing_value
@@ -87,3 +89,12 @@ Choose a system:
     <option value="B">B</option>
 </select>
 """
+
+
+def options_from_form(formdata, spawner=None):
+    options = {}
+    options["system"] = formdata["system"][0]
+    return options
+
+
+c.SimpleLocalProcessCreditsSpawner.options_from_form = options_from_form
