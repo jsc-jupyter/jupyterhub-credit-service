@@ -188,6 +188,9 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
             # user has no such server
             raise web.HTTPError(404)
         spawner = user.spawners[server_name]
+        billing_value = getattr(spawner, "_billing_value", 0)
+        if billing_value <= 0:
+            raise web.HTTPError(404, "No billing value set for this server.")
         user_options = spawner.user_options
 
         # start sending keepalive to avoid proxies closing the connection
