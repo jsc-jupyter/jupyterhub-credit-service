@@ -133,7 +133,7 @@ class CreditsSSEAPIHandler(APIHandler):
 class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
     """EventStream handler to update UserCredits in Frontend for one specific server"""
 
-    async def event_handler(self, user, user_options):
+    async def event_handler(self, user, user_options, spawner):
         user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
         credits_user_values = None
         default_cuv = None
@@ -157,22 +157,31 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
             type(self._finish_future) is asyncio.Future
             and not self._finish_future.done()
         ):
-            user.authenticator.db_session.refresh(credits_user_values)
-            model_credits = {
-                "balance": credits_user_values.balance,
-                "cap": credits_user_values.cap,
-            }
-            if credits_user_values.project:
-                user.authenticator.db_session.refresh(credits_user_values.project)
-                model_credits["project"] = {
-                    "name": credits_user_values.project.name,
-                    "balance": credits_user_values.project.balance,
-                    "cap": credits_user_values.project.cap,
+            if not spawner.ready:
+                try:
+                    yield {
+                        "error": "Your Server is no longer running.\nRestart of Jupyter Server required."
+                    }
+                    return
+                except GeneratorExit as e:
+                    raise e
+            else:
+                user.authenticator.db_session.refresh(credits_user_values)
+                model_credits = {
+                    "balance": credits_user_values.balance,
+                    "cap": credits_user_values.cap,
                 }
-            try:
-                yield model_credits
-            except GeneratorExit as e:
-                raise e
+                if credits_user_values.project:
+                    user.authenticator.db_session.refresh(credits_user_values.project)
+                    model_credits["project"] = {
+                        "name": credits_user_values.project.name,
+                        "balance": credits_user_values.project.balance,
+                        "cap": credits_user_values.project.cap,
+                    }
+                try:
+                    yield model_credits
+                except GeneratorExit as e:
+                    raise e
             await user.authenticator.credits_task_event.wait()
 
     @needs_scope("read:servers")
@@ -202,7 +211,7 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
         try:
             async with aclosing(
                 iterate_until(
-                    self.keepalive_task, self.event_handler(user, user_options)
+                    self.keepalive_task, self.event_handler(user, user_options, spawner)
                 )
             ) as events:
                 async for event in events:

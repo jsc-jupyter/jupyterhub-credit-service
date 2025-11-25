@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import os
 
@@ -184,6 +185,14 @@ class CreditsSpawner(Spawner):
 
         return result
 
+    async def run_post_stop_hook(self):
+        result = super().run_post_stop_hook()
+        if self.user.authenticator.credits_task_event:
+            self.user.authenticator.credits_task_event.set()
+            await asyncio.sleep(0)
+            self.user.authenticator.credits_task_event.clear()
+        return result
+
     async def start(self):
         _start = super().start()
         if inspect.isawaitable(_start):
@@ -196,8 +205,8 @@ class CreditsSpawner(Spawner):
             _poll = await _poll
         return _poll
 
-    async def stop(self):
-        _stop = super().stop()
+    async def stop(self, now=False):
+        _stop = super().stop(now=now)
         if inspect.isawaitable(_stop):
             _stop = await _stop
         return _stop
