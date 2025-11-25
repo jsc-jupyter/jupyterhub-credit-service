@@ -133,7 +133,8 @@ class CreditsSSEAPIHandler(APIHandler):
 class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
     """EventStream handler to update UserCredits in Frontend for one specific server"""
 
-    async def event_handler(self, user, user_options, spawner):
+    async def event_handler(self, user, spawner):
+        user_options = spawner.user_options
         user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
         credits_user_values = None
         default_cuv = None
@@ -149,10 +150,6 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
                 break
         if credits_user_values is None:
             credits_user_values = default_cuv
-        if credits_user_values is None:
-            raise Exception(
-                "No matching credit values found for server. Please adjust your options and try again."
-            )
         while (
             type(self._finish_future) is asyncio.Future
             and not self._finish_future.done()
@@ -165,7 +162,7 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
                     return
                 except GeneratorExit as e:
                     raise e
-            else:
+            elif credits_user_values:
                 user.authenticator.db_session.refresh(credits_user_values)
                 model_credits = {
                     "balance": credits_user_values.balance,
@@ -199,10 +196,6 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
         spawner = user.spawners[server_name]
         if not spawner.ready:
             raise web.HTTPError(409, "Server is not running.")
-        billing_value = getattr(spawner, "_billing_value", 0)
-        if billing_value <= 0:
-            raise web.HTTPError(404, "No billing value set for this server.")
-        user_options = spawner.user_options
 
         # start sending keepalive to avoid proxies closing the connection
         # This task will be finished / done, once the tab in the browser is closed
@@ -210,9 +203,7 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
 
         try:
             async with aclosing(
-                iterate_until(
-                    self.keepalive_task, self.event_handler(user, user_options, spawner)
-                )
+                iterate_until(self.keepalive_task, self.event_handler(user, spawner))
             ) as events:
                 async for event in events:
                     if event:
