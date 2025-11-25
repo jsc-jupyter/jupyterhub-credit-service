@@ -188,6 +188,8 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
             # user has no such server
             raise web.HTTPError(404)
         spawner = user.spawners[server_name]
+        if not spawner.ready:
+            raise web.HTTPError(409, "Server is not running.")
         billing_value = getattr(spawner, "_billing_value", 0)
         if billing_value <= 0:
             raise web.HTTPError(404, "No billing value set for this server.")
