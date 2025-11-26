@@ -146,7 +146,7 @@ class CreditsSpawner(Spawner):
 
             if self._billing_value > 0:
                 credits_user = CreditsUser.get_user(
-                    self.user.authenticator.db_session, self.user.name
+                    self.user.authenticator.parent.db, self.user.name
                 )
                 if not credits_user or not credits_user.credits_user_values:
                     raise CreditsException(

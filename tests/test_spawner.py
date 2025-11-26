@@ -41,7 +41,7 @@ async def test_spawner_first_bill(db, app, user):
 
     await app.login_user(user.name)
     user_credits = CreditsUser.get_user(
-        app.authenticator.db_session, user.name
+        app.authenticator.parent.db, user.name
     ).credits_user_values[0]
     assert user_credits.cap == user_credits_simple["cap"]
     assert user_credits.balance == user_credits_simple["cap"]
@@ -56,7 +56,7 @@ async def test_spawner_first_bill(db, app, user):
     call_counter = []
     await event.wait()
 
-    app.authenticator.db_session.refresh(user_credits)
+    app.authenticator.parent.db.refresh(user_credits)
     assert len(call_counter) >= 1, f"Call counter: {call_counter}"
     assert (
         user_credits.balance != user_credits_simple["cap"]
@@ -97,7 +97,7 @@ async def test_spawner_refresh_credits_pre_spawn(db, app, user, mocker):
 
     await app.login_user(user.name)
     user_credits = CreditsUser.get_user(
-        app.authenticator.db_session, user.name
+        app.authenticator.parent.db, user.name
     ).credits_user_values[0]
     assert user_credits.cap == user_credits_simple["cap"]
     assert user_credits.balance == user_credits_simple["cap"]
@@ -134,7 +134,7 @@ async def test_spawner_stopped_labs_not_billed(db, app, user):
     app.authenticator.credits_user = user_credits_simple
     app.db.refresh(user)
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits = credits_user.credits_user_values[0]
 
     assert user_credits.cap == user_credits_simple["cap"]
@@ -150,7 +150,7 @@ async def test_spawner_stopped_labs_not_billed(db, app, user):
     call_counter = []
     await event.wait()
 
-    app.authenticator.db_session.refresh(user_credits)
+    app.authenticator.parent.db.refresh(user_credits)
     assert len(call_counter) >= 1, f"Call counter: {call_counter}"
     assert (
         user_credits.balance != user_credits_simple["cap"]
@@ -169,14 +169,14 @@ async def test_spawner_stopped_labs_not_billed(db, app, user):
     status = await spawner.poll()
     assert status == 0
 
-    app.authenticator.db_session.refresh(user_credits)
+    app.authenticator.parent.db.refresh(user_credits)
     after_stop_balance = user_credits.balance
 
     await asyncio.sleep(save_billing_interval)
 
     # Wait for next billing run
     await event.wait()
-    app.authenticator.db_session.refresh(user_credits)
+    app.authenticator.parent.db.refresh(user_credits)
     assert (
         after_stop_balance == user_credits.balance
     ), f"{after_stop_balance} not equal {user_credits.balance}"
@@ -199,7 +199,7 @@ async def test_spawner_second_bill(db, app, user):
     app.authenticator.credits_user = user_credits_simple
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -214,7 +214,7 @@ async def test_spawner_second_bill(db, app, user):
     call_counter = []
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user_values)
+    app.authenticator.parent.db.refresh(credits_user_values)
     assert len(call_counter) >= 1, f"Call counter: {call_counter}"
     assert (
         credits_user_values.balance != user_credits_simple["cap"]
@@ -229,7 +229,7 @@ async def test_spawner_second_bill(db, app, user):
     assert status is None
 
     # Wait until the spawner must be billed again
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     last_spawner_bill = credits_user.spawner_bills[str(spawner.orm_spawner.id)]
     next_spawner_bill = datetime.fromisoformat(last_spawner_bill) + timedelta(
         seconds=spawner._billing_interval
@@ -241,7 +241,7 @@ async def test_spawner_second_bill(db, app, user):
     # Wait for next billing run
     await user.authenticator.credits_task_event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance
         == user_credits_simple["cap"] - 2 * spawner._billing_value
@@ -287,7 +287,7 @@ async def test_spawner_proj_billed(db, app, user):
     # app.authenticator.credits_user_project = user_project
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -301,7 +301,7 @@ async def test_spawner_proj_billed(db, app, user):
     # Now the spawner is running. Let's clear the event and wait for another billing run
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value First: {credits_user_values.balance} != {user_credits_simple['cap']}  "
@@ -317,7 +317,7 @@ async def test_spawner_proj_billed(db, app, user):
     assert status is None
 
     # Wait until the spawner must be billed again
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     last_spawner_bill = credits_user.spawner_bills[str(spawner.orm_spawner.id)]
     next_spawner_bill = datetime.fromisoformat(last_spawner_bill) + timedelta(
         seconds=spawner._billing_interval
@@ -329,12 +329,12 @@ async def test_spawner_proj_billed(db, app, user):
     # Wait for next billing run
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value Second: {credits_user_values.balance} != {user_credits_simple['cap']}"
 
-    app.authenticator.db_session.refresh(proj_credits)
+    app.authenticator.parent.db.refresh(proj_credits)
     assert (
         proj_credits.balance == proj_credits.cap - 2 * spawner._billing_value
     ), f"Proj Credits value First: {proj_credits.balance} != {proj_credits.cap} - {2*spawner._billing_value}"
@@ -375,7 +375,7 @@ async def test_spawner_proj_billed_partly(db, app, user):
     app.authenticator.credits_task_interval = 1
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -389,7 +389,7 @@ async def test_spawner_proj_billed_partly(db, app, user):
     # Now the spawner is running. Let's clear the event and wait for another billing run
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
 
     user_to_pay = spawner._billing_value - credits_user_values.project.cap
     assert (
@@ -435,7 +435,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     app.authenticator.credits_task_interval = 1
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -449,7 +449,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     # Now the spawner is running. Let's clear the event and wait for another billing run
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value First: {credits_user_values.balance} != {user_credits_simple['cap']}  "
@@ -464,7 +464,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     assert status is None
 
     # Wait until the spawner must be billed again
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     last_spawner_bill = credits_user.spawner_bills[str(spawner.orm_spawner.id)]
     next_spawner_bill = datetime.fromisoformat(last_spawner_bill) + timedelta(
         seconds=spawner._billing_interval
@@ -476,7 +476,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     # Wait for next billing run
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value Second: {credits_user_values.balance} != {user_credits_simple['cap']} "
@@ -498,7 +498,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     app.log.info("++++++++++++++ Stopped Server")
 
     # Save current balance to use as reference for second start
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     save_proj_credits_balance = credits_user_values.project.balance
 
     # Let's wait billing_interval seconds before starting again
@@ -507,7 +507,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     # Wait for next billing run
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value First: {credits_user_values.balance}"
@@ -530,7 +530,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     await event.wait()
 
     # Assert first bill on second run
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value Second: {credits_user_values.balance}"
@@ -544,7 +544,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     assert status is None
 
     # Wait until the spawner must be billed again
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     last_spawner_bill = credits_user.spawner_bills[str(spawner.orm_spawner.id)]
     next_spawner_bill = datetime.fromisoformat(last_spawner_bill) + timedelta(
         seconds=spawner._billing_interval
@@ -557,7 +557,7 @@ async def test_spawner_proj_billed_start_stop_start(db, app, user):
     await event.wait()
 
     # Asset second bill for second run
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value Second: {credits_user_values.balance}"
@@ -591,7 +591,7 @@ async def test_spawner_to_expensive(db, app, user):
     app.authenticator.credits_user = not_enough_credits
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == not_enough_credits["cap"]
     assert credits_user_values.balance == not_enough_credits["cap"]
@@ -604,7 +604,7 @@ async def test_spawner_to_expensive(db, app, user):
         assert "Current User credits" in str(exc_info.value)
         assert "project" not in str(exc_info.value)
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == not_enough_credits["cap"]
     ), f"Credits value: {credits_user_values.balance} != {not_enough_credits['cap']}"
@@ -643,7 +643,7 @@ async def test_spawner_proj_to_expensive(db, app, user):
     app.authenticator.credits_task_interval = 1
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -687,7 +687,7 @@ async def test_spawner_proj_costs_more_than_usercredit(db, app, user):
     app.authenticator.credits_task_interval = 1
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -703,7 +703,7 @@ async def test_spawner_proj_costs_more_than_usercredit(db, app, user):
     call_counter = []
     await event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance == user_credits_simple["cap"]
     ), f"Credits value: {credits_user_values.balance} != {user_credits_simple['cap']}  "
@@ -741,7 +741,7 @@ async def test_spawner_stopped_when_no_credits_left(db, app, user):
     app.authenticator.credits_task_interval = 10
 
     await app.login_user(user.name)
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert credits_user_values.cap == user_credits_simple["cap"]
     assert credits_user_values.balance == user_credits_simple["cap"]
@@ -759,7 +759,7 @@ async def test_spawner_stopped_when_no_credits_left(db, app, user):
     call_counter = []
     await app.authenticator.credits_task_event.wait()
 
-    app.authenticator.db_session.refresh(credits_user)
+    app.authenticator.parent.db.refresh(credits_user)
     assert (
         credits_user_values.balance
         == user_credits_simple["cap"] - spawner.billing_value

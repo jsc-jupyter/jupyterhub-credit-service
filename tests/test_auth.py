@@ -141,7 +141,7 @@ user_credits_multiple_wo_default_multimatch = [
 async def test_credits_user_simple(app, user):
     app.authenticator.credits_user = user_credits_simple
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 1
@@ -156,7 +156,7 @@ async def test_credits_user_simple(app, user):
 async def test_credits_user_simple_list(app, user):
     app.authenticator.credits_user = [user_credits_simple]
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 1
@@ -171,7 +171,7 @@ async def test_credits_user_simple_list(app, user):
 async def test_credits_user_list_w_default(app, user):
     app.authenticator.credits_user = user_credits_multiple_w_default
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 2
@@ -217,7 +217,7 @@ async def test_credits_user_list_w_default(app, user):
 async def test_credits_user_list_wo_default(app, user):
     app.authenticator.credits_user = user_credits_multiple_wo_default
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 2
@@ -264,7 +264,7 @@ async def test_credits_user_list_wo_default(app, user):
 async def test_credits_user_list_wo_default_multimatch(app, user):
     app.authenticator.credits_user = user_credits_multiple_wo_default_multimatch
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 2
@@ -311,7 +311,7 @@ async def test_credits_user_list_wo_default_multimatch(app, user):
 async def test_credits_user_simple_func(app, user):
     app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 1
@@ -326,7 +326,7 @@ async def test_credits_user_simple_func(app, user):
 async def test_credits_user_simple_func_list(app, user):
     app.authenticator.credits_user = user_credits_simple_function_list
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 1
@@ -341,7 +341,7 @@ async def test_credits_user_simple_func_list(app, user):
 async def test_credits_user_simple_asyncfunc(app, user):
     app.authenticator.credits_user = async_user_credits_simple_function
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 1
@@ -356,7 +356,7 @@ async def test_credits_user_simple_asyncfunc(app, user):
 async def test_credits_user_simple_asyncfunc_list(app, user):
     app.authenticator.credits_user = async_user_credits_simple_function_list
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits_values = user_credits.credits_user_values
     assert user_credits_values is not None
     assert len(user_credits_values) == 1
@@ -379,14 +379,14 @@ async def test_credits_user_function_admin(app, user, admin_user):
 
     app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(admin_user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, admin_user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, admin_user.name)
     assert (
         user_credits.credits_user_values[0].cap
         == user_credits_simple["cap"] + admin_added_cap
     )
 
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"]
 
 
@@ -405,14 +405,14 @@ async def test_credits_user_function_group(app, users, group):
 
     app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(user1.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user1.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user1.name)
     assert (
         user_credits.credits_user_values[0].cap
         == user_credits_simple["cap"] + group_added_cap
     )
 
     await app.login_user(user2.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user2.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user2.name)
     assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"]
 
 
@@ -429,14 +429,14 @@ async def test_credits_user_function_username_async(app, users):
 
     app.authenticator.credits_user = user_credits_simple_function
     await app.login_user(user1.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user1.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user1.name)
     assert (
         user_credits.credits_user_values[0].cap
         == user_credits_simple["cap"] + user1_added_cap
     )
 
     await app.login_user(user2.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user2.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user2.name)
     assert user_credits.credits_user_values[0].cap == user_credits_simple["cap"]
 
 
@@ -466,11 +466,11 @@ async def test_credits_available_projects_user_project(app, users):
     app.authenticator.credits_user = user_credits
     await app.login_user(user1.name)
     await app.login_user(user2.name)
-    user_credits1 = CreditsUser.get_user(app.authenticator.db_session, user1.name)
+    user_credits1 = CreditsUser.get_user(app.authenticator.parent.db, user1.name)
     assert user_credits1.credits_user_values[0].project.name == "community1"
     assert user_credits1.credits_user_values[0].project_name == "community1"
 
-    user_credits2 = CreditsUser.get_user(app.authenticator.db_session, user2.name)
+    user_credits2 = CreditsUser.get_user(app.authenticator.parent.db, user2.name)
     assert user_credits2.credits_user_values[0].project.name == "community2"
     assert user_credits2.credits_user_values[0].project_name == "community2"
 
@@ -489,14 +489,14 @@ async def test_credits_available_projects_user_project_add_entry(app, user):
 
     app.authenticator.credits_user = async_user_credits_runtime_change
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     assert len(user_credits.credits_user_values) == 1
     assert user_credits.credits_user_values[0].project.name == "systemA"
     assert user_credits.credits_user_values[0].project_name == "systemA"
 
     return_all = True
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     assert len(user_credits.credits_user_values) == 2
     assert user_credits.credits_user_values[0].project.name == "systemA"
     assert user_credits.credits_user_values[0].project_name == "systemA"
@@ -520,7 +520,7 @@ async def test_credits_available_projects_user_project_del_entry(app, user):
 
     app.authenticator.credits_user = async_user_credits_runtime_change
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     assert len(user_credits.credits_user_values) == 2
     assert user_credits.credits_user_values[0].project.name == "systemA"
     assert user_credits.credits_user_values[0].project_name == "systemA"
@@ -531,7 +531,7 @@ async def test_credits_available_projects_user_project_del_entry(app, user):
 
     return_all = False
     await app.login_user(user.name)
-    user_credits = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    user_credits = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     assert len(user_credits.credits_user_values) == 1
     assert user_credits.credits_user_values[0].project.name == "systemB"
     assert user_credits.credits_user_values[0].project_name == "systemB"

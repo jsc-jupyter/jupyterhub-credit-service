@@ -30,7 +30,7 @@ async def test_credits_auth(app, user):
     resp = r.json()
     assert len(resp) > 0
     resp = resp[0]
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert resp["name"] == credits_user_values.name
     assert resp["balance"] == credits_user_values.balance
@@ -63,7 +63,7 @@ async def test_credits_auth_proj(app, user):
     resp = r.json()
     assert len(resp) > 0
     resp = resp[0]
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     credits_user_values = credits_user.credits_user_values[0]
     assert resp["name"] == credits_user_values.name
     assert resp["project"]["name"] == credits_user_values.project_name
@@ -87,7 +87,7 @@ async def test_credits_admin_user_update(app, user):
     r = await api_request(app, "credits", headers={"Authorization": "token " + token})
     assert r.status_code == 200
     resp = r.json()
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits = credits_user.credits_user_values[0]
     assert resp[0]["balance"] == user_credits.balance
 
@@ -100,7 +100,7 @@ async def test_credits_admin_user_update(app, user):
         method="post",
     )
     assert r.status_code == 200
-    app.authenticator.db_session.refresh(user_credits)
+    app.authenticator.parent.db.refresh(user_credits)
     assert user_credits.balance == new_balance
 
 
@@ -112,7 +112,7 @@ async def test_credits_admin_user_403(app, user):
     r = await api_request(app, "credits", headers={"Authorization": "token " + token})
     assert r.status_code == 200
     resp = r.json()
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits = credits_user.credits_user_values[0]
     assert resp[0]["balance"] == user_credits.balance
 
@@ -146,7 +146,7 @@ async def test_credits_admin_proj_update(app, user):
     r = await api_request(app, "credits", headers={"Authorization": "token " + token})
     assert r.status_code == 200
     resp = r.json()
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits = credits_user.credits_user_values[0]
     assert resp[0]["project"]["balance"] == user_credits.project.balance
 
@@ -156,7 +156,7 @@ async def test_credits_admin_proj_update(app, user):
         app, f"credits/project/{proj_name}", data=json.dumps(data), method="post"
     )
     assert r.status_code == 200
-    app.authenticator.db_session.refresh(user_credits)
+    app.authenticator.parent.db.refresh(user_credits)
     assert user_credits.project.balance == new_balance
 
 
@@ -178,7 +178,7 @@ async def test_credits_admin_proj_403(app, user):
     r = await api_request(app, "credits", headers={"Authorization": "token " + token})
     assert r.status_code == 200
     resp = r.json()
-    credits_user = CreditsUser.get_user(app.authenticator.db_session, user.name)
+    credits_user = CreditsUser.get_user(app.authenticator.parent.db, user.name)
     user_credits = credits_user.credits_user_values[0]
     assert resp[0]["project"]["balance"] == user_credits.project.balance
 

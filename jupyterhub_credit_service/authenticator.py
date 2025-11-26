@@ -16,7 +16,6 @@ from .orm import Base, CreditsProject, CreditsUser, CreditsUserValues
 
 class CreditsAuthenticator(Authenticator):
     credits_task = None
-    db_session = None
     user_credits_dict = {}
     credits_task_event = None
 
@@ -258,7 +257,7 @@ class CreditsAuthenticator(Authenticator):
             try:
                 tic = time.time()
                 now = utcnow(with_tz=False)
-                all_credit_users = self.db_session.query(CreditsUser).all()
+                all_credit_users = self.parent.db.query(CreditsUser).all()
                 for credit_user in all_credit_users:
                     for credits in credit_user.credits_user_values:
                         try:
@@ -299,7 +298,7 @@ class CreditsAuthenticator(Authenticator):
                                             },
                                         )
                                 if proj_updated:
-                                    self.db_session.commit()
+                                    self.parent.db.commit()
                             prev_balance = credits.balance
                             cap = credits.cap
                             updated = False
@@ -332,7 +331,7 @@ class CreditsAuthenticator(Authenticator):
                                         },
                                     )
                             if updated:
-                                self.db_session.commit()
+                                self.parent.db.commit()
 
                             # All projects and user credits are updated.
                             # Now check running spawners and bill credits
@@ -515,7 +514,7 @@ class CreditsAuthenticator(Authenticator):
                                                 credit_user.spawner_bills[
                                                     spawner_id_str
                                                 ] = last_billed.isoformat()
-                                                self.db_session.commit()
+                                                self.parent.db.commit()
                                     except:
                                         self.log.exception(
                                             f"Error while updating user credits for {credit_user} in spawner {spawner._log_name}."
@@ -552,23 +551,23 @@ class CreditsAuthenticator(Authenticator):
         super().__init__(**kwargs)
         if self.credits_enabled:
             self.credits_task_event = asyncio.Event()
-            hub = self.parent
-            from jupyterhub import orm
+            # hub = self.parent
+            # from jupyterhub import orm
 
-            session_factory = orm.new_session_factory(
-                hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
-            )
-            self.db_session = session_factory()
+            # session_factory = orm.new_session_factory(
+            #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
+            # )
+            # self.parent.db = session_factory()
             from sqlalchemy import create_engine
 
-            engine = create_engine(hub.db_url)
+            engine = create_engine(self.parent.db_url)
             Base.metadata.create_all(engine)
             # hub = self.parent
             # # session_factory = orm.new_session_factory(
             # #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
             # # )
 
-            # self.db_session = hub.db
+            # self.parent.db = hub.db
             # from sqlalchemy import create_engine
 
             # engine = create_engine(hub.db_url)
@@ -593,12 +592,12 @@ class CreditsAuthenticator(Authenticator):
 
         grant_last_update = utcnow(with_tz=False)
 
-        credits_user_database = CreditsUser.get_user(self.db_session, user_name)
+        credits_user_database = CreditsUser.get_user(self.parent.db, user_name)
         if not credits_user_database:
             # Add CreditsUser entry
             credits_user_database = CreditsUser(name=user_name)
-            self.db_session.add(credits_user_database)
-            self.db_session.commit()
+            self.parent.db.add(credits_user_database)
+            self.parent.db.commit()
 
         # Collect configured values
         credits_user_values_configured = await resolve_value(self.credits_user)
@@ -620,8 +619,8 @@ class CreditsAuthenticator(Authenticator):
         # 1. Keep database entries that are currently configured
         for credits_user_value_db in credits_user_database.credits_user_values:
             if credits_user_value_db.name not in credits_user_values_configured_names:
-                self.db_session.delete(credits_user_value_db)
-                self.db_session.commit()
+                self.parent.db.delete(credits_user_value_db)
+                self.parent.db.commit()
 
         for name, credits_user_value in credits_user_values_configured_by_name.items():
             # Does the configuration for the user exist in database, update it. Otherwise create it
@@ -633,15 +632,15 @@ class CreditsAuthenticator(Authenticator):
                 if not project:
                     continue
                 orm_project = CreditsProject.get_project(
-                    self.db_session, configured_project["name"]
+                    self.parent.db, configured_project["name"]
                 )
 
                 if not orm_project:
                     # Create entry in database
                     project["balance"] = project["cap"]
                     orm_project = CreditsProject(**project)
-                    self.db_session.add(orm_project)
-                    self.db_session.commit()
+                    self.parent.db.add(orm_project)
+                    self.parent.db.commit()
                 else:
                     # Check + Update project
                     prev_project_balance = orm_project.balance
@@ -661,11 +660,11 @@ class CreditsAuthenticator(Authenticator):
                         proj_updated = True
                         orm_project.grant_interval = project["grant_interval"]
                     if proj_updated:
-                        self.db_session.add(orm_project)
-                        self.db_session.commit()
+                        self.parent.db.add(orm_project)
+                        self.parent.db.commit()
 
             database_entry = CreditsUser.get_user(
-                self.db_session, user_name
+                self.parent.db, user_name
             ).credits_user_values
             database_entry = [x for x in database_entry if x.name == name]
             if database_entry:
@@ -692,13 +691,13 @@ class CreditsAuthenticator(Authenticator):
                     credits_user=credits_user_database,
                     project=orm_project,
                 )
-            self.db_session.add(database_entry)
-            self.db_session.commit()
+            self.parent.db.add(database_entry)
+            self.parent.db.commit()
 
     async def run_post_auth_hook(self, handler, auth_model):
         auth_model = await super().run_post_auth_hook(handler, auth_model)
         if self.credits_enabled:
-            orm_user = ORMUser.find(self.db_session, auth_model["name"])
+            orm_user = ORMUser.find(self.parent.db, auth_model["name"])
             # If it's a new user there won't be an entry.
             # This case will be handled in .add_user()
             if orm_user:

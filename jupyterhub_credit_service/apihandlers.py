@@ -92,13 +92,13 @@ class CreditsSSEAPIHandler(APIHandler):
             await asyncio.wait([self._finish_future], timeout=self.keepalive_interval)
 
     async def event_handler(self, user):
-        user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        user_credits = CreditsUser.get_user(user.authenticator.parent.db, user.name)
 
         while (
             type(self._finish_future) is asyncio.Future
             and not self._finish_future.done()
         ):
-            user.authenticator.db_session.refresh(user_credits)
+            user.authenticator.parent.db.refresh(user_credits)
             model_credits = get_model(user_credits)
             try:
                 yield model_credits
@@ -135,7 +135,7 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
 
     async def event_handler(self, user, spawner):
         user_options = spawner.user_options
-        user_credits = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        user_credits = CreditsUser.get_user(user.authenticator.parent.db, user.name)
         credits_user_values = None
         default_cuv = None
         for cuv in user_credits.credits_user_values:
@@ -163,13 +163,13 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
                 except GeneratorExit as e:
                     raise e
             elif credits_user_values:
-                user.authenticator.db_session.refresh(credits_user_values)
+                user.authenticator.parent.db.refresh(credits_user_values)
                 model_credits = {
                     "balance": credits_user_values.balance,
                     "cap": credits_user_values.cap,
                 }
                 if credits_user_values.project:
-                    user.authenticator.db_session.refresh(credits_user_values.project)
+                    user.authenticator.parent.db.refresh(credits_user_values.project)
                     model_credits["project"] = {
                         "name": credits_user_values.project.name,
                         "balance": credits_user_values.project.balance,
@@ -281,7 +281,7 @@ class CreditsAPIHandler(APIHandler):
         if not user.authenticator.credits_enabled:
             raise HTTPError(404, "Credits function is currently disabled")
 
-        credits_user = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        credits_user = CreditsUser.get_user(user.authenticator.parent.db, user.name)
 
         if not credits_user:
             # Create entry for user with default values
@@ -299,7 +299,7 @@ class CreditsUserAPIHandler(APIHandler):
         if not user:
             raise HTTPError(404, "User not found")
         data = self.get_json_body()
-        credits_user = CreditsUser.get_user(user.authenticator.db_session, user.name)
+        credits_user = CreditsUser.get_user(user.authenticator.parent.db, user.name)
         if not credits_user:
             # Create entry for user with default values
             raise HTTPError(404, "No credit entry found for user")
@@ -367,8 +367,8 @@ class CreditsUserAPIHandler(APIHandler):
                 proj_updated = True
                 credits_user_values.project.grant_interval = project_grant_interval
             if proj_updated:
-                user.authenticator.db_session.add(credits_user_values.project)
-                user.authenticator.db_session.commit()
+                user.authenticator.parent.db.add(credits_user_values.project)
+                user.authenticator.parent.db.commit()
         elif project and not credits_user_values.project:
             _project = user.authenticator.credits_validate_and_update_project(
                 credits_user_values
@@ -382,15 +382,15 @@ class CreditsUserAPIHandler(APIHandler):
             else:
                 _project["balance"] = _project["cap"]
                 orm_project = CreditsProject(**_project)
-                user.authenticator.db_session.add(orm_project)
+                user.authenticator.parent.db.add(orm_project)
                 credits_user_values.project = orm_project
-                user.authenticator.db_session.commit()
+                user.authenticator.parent.db.commit()
         elif not project and credits_user_values.project:
-            user.authenticator.db_session.delete(credits_user_values.project)
+            user.authenticator.parent.db.delete(credits_user_values.project)
             credits_user_values.project = None
 
-        user.authenticator.db_session.add(credits_user)
-        user.authenticator.db_session.commit()
+        user.authenticator.parent.db.add(credits_user)
+        user.authenticator.parent.db.commit()
         self.set_status(200)
 
 
@@ -404,7 +404,7 @@ class CreditsProjectAPIHandler(APIHandler):
         grant_interval = data.get("grant_interval", None)
 
         project = CreditsProject.get_project(
-            self.current_user.authenticator.db_session, project_name
+            self.current_user.authenticator.parent.db, project_name
         )
 
         if not project:
@@ -428,5 +428,5 @@ class CreditsProjectAPIHandler(APIHandler):
             project.grant_value = grant_value
         if grant_interval:
             project.grant_interval = grant_interval
-        self.current_user.authenticator.db_session.commit()
+        self.current_user.authenticator.parent.db.commit()
         self.set_status(200)
