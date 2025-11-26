@@ -187,6 +187,8 @@ class CreditsSpawner(Spawner):
 
     async def run_post_stop_hook(self):
         result = super().run_post_stop_hook()
+        if inspect.isawaitable(result):
+            result = await result
         if self.user.authenticator.credits_task_event:
             self.user.authenticator.credits_task_event.set()
             await asyncio.sleep(0)
