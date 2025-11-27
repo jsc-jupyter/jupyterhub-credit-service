@@ -105,6 +105,7 @@ class CreditsSSEAPIHandler(APIHandler):
             except GeneratorExit as e:
                 raise e
             await user.authenticator.credits_task_event.wait()
+            await asyncio.sleep(0)
 
     @authenticated
     async def get(self):
@@ -180,6 +181,7 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
                 except GeneratorExit as e:
                     raise e
             await user.authenticator.credits_task_event.wait()
+            await asyncio.sleep(0)
 
     @needs_scope("read:servers")
     async def get(self, user_name, server_name=None):
