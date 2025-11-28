@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from jupyterhub.auth import Authenticator
 from jupyterhub.orm import User as ORMUser
 from jupyterhub.utils import utcnow
+from sqlalchemy import inspect as sqlinspect
 from traitlets import Any, Bool, Callable, Dict, Integer, List, Union
 
 from .orm import Base, CreditsProject, CreditsUser, CreditsUserValues
@@ -551,27 +552,21 @@ class CreditsAuthenticator(Authenticator):
         super().__init__(**kwargs)
         if self.credits_enabled:
             self.credits_task_event = asyncio.Event()
-            # hub = self.parent
-            # from jupyterhub import orm
+            inspector = sqlinspect(self.parent.db.bind)
+            tables = set(inspector.get_table_names())
 
-            # session_factory = orm.new_session_factory(
-            #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
-            # )
-            # self.parent.db = session_factory()
-            from sqlalchemy import create_engine
+            missing = {
+                "credits_user",
+                "credits_user_values",
+                "credits_project",
+            } - tables
+            if missing:
+                self.log.warning("Create Database Tables for JupyterHub Credit Service")
+                from sqlalchemy import create_engine
 
-            engine = create_engine(self.parent.db_url)
-            Base.metadata.create_all(engine)
-            # hub = self.parent
-            # # session_factory = orm.new_session_factory(
-            # #     hub.db_url, reset=hub.reset_db, echo=hub.debug_db, **hub.db_kwargs
-            # # )
+                engine = create_engine(self.parent.db_url)
+                Base.metadata.create_all(engine)
 
-            # self.parent.db = hub.db
-            # from sqlalchemy import create_engine
-
-            # engine = create_engine(hub.db_url)
-            # Base.metadata.create_all(engine)
             self.credits_task = asyncio.create_task(self.credit_reconciliation_task())
 
     async def update_user_credit(self, auth_model):
