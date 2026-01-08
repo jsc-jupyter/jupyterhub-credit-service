@@ -260,6 +260,15 @@ class CreditsAuthenticator(Authenticator):
                 now = utcnow(with_tz=False)
                 all_credit_users = self.parent.db.query(CreditsUser).all()
                 for credit_user in all_credit_users:
+                    mem_user = self.user_credits_dict.get(credit_user.name, None)
+                    try:
+                        if mem_user:
+                            # Refresh user auth
+                            await self.refresh_user(mem_user)
+                    except:
+                        self.log.exception(
+                            f"Error while refreshing user {credit_user.name} in credit task."
+                        )
                     for credits in credit_user.credits_user_values:
                         try:
                             if credits.project:
@@ -336,9 +345,6 @@ class CreditsAuthenticator(Authenticator):
 
                             # All projects and user credits are updated.
                             # Now check running spawners and bill credits
-                            mem_user = self.user_credits_dict.get(
-                                credit_user.name, None
-                            )
                             if mem_user:
                                 to_stop = []
                                 for spawner in mem_user.spawners.values():
@@ -702,9 +708,3 @@ class CreditsAuthenticator(Authenticator):
                 auth_model["admin"] = orm_user.admin or False
             await self.update_user_credit(auth_model)
         return auth_model
-
-    async def add_user(self, user):
-        super().add_user(user)
-        if self.credits_enabled:
-            pass
-            # await self.update_user_credit(getattr(user, "orm_user", user))
