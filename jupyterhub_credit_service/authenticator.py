@@ -275,14 +275,10 @@ class CreditsAuthenticator(Authenticator):
                                 proj_prev_balance = credits.project.balance
                                 proj_cap = credits.project.cap
                                 proj_updated = False
-                                if proj_prev_balance == proj_cap:
-                                    credits.project.grant_last_update = now
-                                    proj_updated = True
-                                elif proj_prev_balance > proj_cap:
-                                    credits.project.grant_last_update = now
+                                if proj_prev_balance > proj_cap:
                                     credits.project.balance = proj_cap
                                     proj_updated = True
-                                else:
+                                elif proj_prev_balance < proj_cap:
                                     elapsed = (
                                         now - credits.project.grant_last_update
                                     ).total_seconds()
@@ -312,11 +308,7 @@ class CreditsAuthenticator(Authenticator):
                             prev_balance = credits.balance
                             cap = credits.cap
                             updated = False
-                            if prev_balance == cap:
-                                credits.grant_last_update = now
-                                updated = True
-                            elif prev_balance > cap:
-                                credits.grant_last_update = now
+                            if prev_balance > cap:
                                 credits.balance = cap
                                 updated = True
                             else:
