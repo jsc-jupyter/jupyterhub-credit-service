@@ -7,6 +7,7 @@ else:
     from async_generator import aclosing
 
 from jupyterhub.apihandlers.base import APIHandler
+from jupyterhub.handlers import auth_header_pat
 from jupyterhub.scopes import needs_scope
 from jupyterhub.utils import iterate_until
 from tornado import web
@@ -183,15 +184,41 @@ class CreditsSSEServerAPIHandler(CreditsSSEAPIHandler):
             await user.authenticator.credits_task_event.wait()
             await asyncio.sleep(0)
 
-    @needs_scope("read:servers")
+    def check_xsrf_cookie(self):
+        pass
+
+    def get_auth_token(self):
+        """Get the authorization token from Authorization header"""
+        args_token = self.request.arguments.get("token", [None])[0]
+        args_token = (
+            args_token.decode("utf-8") if isinstance(args_token, bytes) else args_token
+        )
+        if args_token:
+            return args_token
+
+        auth_header = self.request.headers.get("Authorization", "")
+        match = auth_header_pat.match(auth_header)
+        if not match:
+            return None
+        return match.group(1)
+
     async def get(self, user_name, server_name=None):
+        args_token = None
+        user = self.get_current_user_token()
+        if user is None:
+            user = await self.get_current_user()
+        else:
+            args_token = self.request.arguments.get("token", [None])[0]
+            args_token = (
+                args_token.decode("utf-8")
+                if isinstance(args_token, bytes)
+                else args_token
+            )
+        if not user:
+            raise web.HTTPError(403, "Not authenticated")
         self.set_header("Cache-Control", "no-cache")
         if server_name is None:
             server_name = ""
-        user = self.find_user(user_name)
-        if user is None:
-            # no such user
-            raise web.HTTPError(404)
         if server_name not in user.spawners:
             # user has no such server
             raise web.HTTPError(404)

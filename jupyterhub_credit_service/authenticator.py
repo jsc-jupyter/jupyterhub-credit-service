@@ -10,7 +10,7 @@ from jupyterhub.auth import Authenticator
 from jupyterhub.orm import User as ORMUser
 from jupyterhub.utils import utcnow
 from sqlalchemy import inspect as sqlinspect
-from traitlets import Any, Bool, Callable, Dict, Integer, List, Union
+from traitlets import Any, Bool, Callable, Dict, Integer, List, Unicode, Union
 
 from .orm import Base, CreditsProject, CreditsUser, CreditsUserValues
 
@@ -130,6 +130,31 @@ class CreditsAuthenticator(Authenticator):
         
         Default: None
           
+        """,
+    ).tag(config=True)
+
+    credits_grant_sync_time = Unicode(
+        default_value=None,
+        allow_none=True,
+        help="""
+        Optional fixed daily time at which credits are granted to all users,
+        independent of their individual grant intervals. This can be used to
+        synchronize credit replenishment across all users, for example every
+        day at 07:00, so users start the day with refreshed credits even
+        if their personal grant interval would replenish later. The configured
+        time is interpreted in server local time and should use the format
+        "HH:MM" (24-hour format). If set to None, synchronized credit granting
+        is disabled and only the per-user rolling grant_interval logic is used.
+
+        When enabled, user might get more credits than configured in grant_value
+        if the sync time is reached before their personal grant_interval replenishes.
+        This can be avoided to use grant_intervals that are dividable by 24h.
+
+        Example::
+
+            c.CreditsAuthenticator.credits_grant_sync_time = "07:00"
+
+        Default: None
         """,
     ).tag(config=True)
 
@@ -258,6 +283,29 @@ class CreditsAuthenticator(Authenticator):
             try:
                 tic = time.time()
                 now = utcnow(with_tz=False)
+                should_trigger_sync = False
+                if self.credits_grant_sync_time is not None:
+                    try:
+                        sync_hour, sync_minute = map(
+                            int, self.credits_grant_sync_time.split(":")
+                        )
+                        sync_dt = now.replace(
+                            hour=sync_hour,
+                            minute=sync_minute,
+                            second=0,
+                            microsecond=0,
+                        )
+                        should_trigger_sync = (
+                            0
+                            <= (now - sync_dt).total_seconds()
+                            <= int(self.credits_task_interval * 1.2)
+                        )
+                    except ValueError:
+                        self.log.error(
+                            "Invalid format for credits_grant_sync_time. Expected HH:MM."
+                        )
+                        should_trigger_sync = False
+
                 all_credit_users = self.parent.db.query(CreditsUser).all()
                 for credit_user in all_credit_users:
                     mem_user = self.user_credits_dict.get(credit_user.name, None)
@@ -275,26 +323,27 @@ class CreditsAuthenticator(Authenticator):
                                 proj_prev_balance = credits.project.balance
                                 proj_cap = credits.project.cap
                                 proj_updated = False
-                                if proj_prev_balance > proj_cap:
-                                    credits.project.balance = proj_cap
-                                    proj_updated = True
-                                elif proj_prev_balance < proj_cap:
-                                    elapsed = (
-                                        now - credits.project.grant_last_update
-                                    ).total_seconds()
-                                    if elapsed > credits.project.grant_interval:
-                                        proj_updated = True
-                                        grants = int(
-                                            elapsed // credits.project.grant_interval
-                                        )
+                                if (
+                                    should_trigger_sync
+                                    and credits.project.grant_last_update < sync_dt
+                                ):
+                                    # only grant if below cap
+                                    if proj_prev_balance < proj_cap:
+                                        elapsed = (
+                                            now - credits.project.grant_last_update
+                                        ).total_seconds()
+                                        grants = 1
+                                        if elapsed > credits.project.grant_interval:
+                                            grants = int(
+                                                elapsed
+                                                // credits.project.grant_interval
+                                            )
                                         gained = grants * credits.project.grant_value
                                         credits.project.balance = min(
-                                            proj_prev_balance + gained, proj_cap
+                                            proj_prev_balance + gained,
+                                            proj_cap,
                                         )
-                                        credits.project.grant_last_update += timedelta(
-                                            seconds=grants
-                                            * credits.project.grant_interval
-                                        )
+
                                         self.log.debug(
                                             f"Project {credits.project_name}: {proj_prev_balance} -> {credits.project.balance} "
                                             f"(+{gained}, cap {credits.project.cap})",
@@ -303,26 +352,67 @@ class CreditsAuthenticator(Authenticator):
                                                 "projectname": credits.project_name,
                                             },
                                         )
+
+                                    # always align timestamp
+                                    proj_updated = True
+                                    credits.project.grant_last_update = now
+                                else:
+                                    if proj_prev_balance > proj_cap:
+                                        credits.project.balance = proj_cap
+                                        proj_updated = True
+                                    elif proj_prev_balance < proj_cap:
+                                        elapsed = (
+                                            now - credits.project.grant_last_update
+                                        ).total_seconds()
+                                        if elapsed > credits.project.grant_interval:
+                                            proj_updated = True
+                                            grants = int(
+                                                elapsed
+                                                // credits.project.grant_interval
+                                            )
+                                            gained = (
+                                                grants * credits.project.grant_value
+                                            )
+                                            credits.project.balance = min(
+                                                proj_prev_balance + gained, proj_cap
+                                            )
+                                            credits.project.grant_last_update += (
+                                                timedelta(
+                                                    seconds=grants
+                                                    * credits.project.grant_interval
+                                                )
+                                            )
+                                            self.log.debug(
+                                                f"Project {credits.project_name}: {proj_prev_balance} -> {credits.project.balance} "
+                                                f"(+{gained}, cap {credits.project.cap})",
+                                                extra={
+                                                    "action": "creditsgained",
+                                                    "projectname": credits.project_name,
+                                                },
+                                            )
                                 if proj_updated:
                                     self.parent.db.commit()
                             prev_balance = credits.balance
                             cap = credits.cap
                             updated = False
-                            if prev_balance > cap:
-                                credits.balance = cap
-                                updated = True
-                            else:
-                                elapsed = (
-                                    now - credits.grant_last_update
-                                ).total_seconds()
-                                if elapsed >= credits.grant_interval:
-                                    updated = True
-                                    grants = int(elapsed // credits.grant_interval)
+                            if (
+                                should_trigger_sync
+                                and credits.grant_last_update < sync_dt
+                            ):
+                                # only grant if below cap
+                                if prev_balance < cap:
+                                    elapsed = (
+                                        now - credits.grant_last_update
+                                    ).total_seconds()
+                                    grants = 1
+                                    if elapsed > credits.grant_interval:
+                                        grants = int(elapsed // credits.grant_interval)
                                     gained = grants * credits.grant_value
-                                    credits.balance = min(prev_balance + gained, cap)
-                                    credits.grant_last_update += timedelta(
-                                        seconds=grants * credits.grant_interval
+                                    credits.balance = min(
+                                        prev_balance + gained,
+                                        cap,
                                     )
+
                                     self.log.debug(
                                         f"User {credit_user.name} ({credits.name}): {prev_balance} -> {credits.balance} "
                                         f"(+{gained}, cap {credits.cap})",
@@ -332,6 +422,37 @@ class CreditsAuthenticator(Authenticator):
                                             "creditsname": credits.name,
                                         },
                                     )
+
+                                # always align timestamp
+                                updated = True
+                                credits.grant_last_update = now
+                            else:
+                                if prev_balance > cap:
+                                    credits.balance = cap
+                                    updated = True
+                                else:
+                                    elapsed = (
+                                        now - credits.grant_last_update
+                                    ).total_seconds()
+                                    if elapsed >= credits.grant_interval:
+                                        updated = True
+                                        grants = int(elapsed // credits.grant_interval)
+                                        gained = grants * credits.grant_value
+                                        credits.balance = min(
+                                            prev_balance + gained, cap
+                                        )
+                                        credits.grant_last_update += timedelta(
+                                            seconds=grants * credits.grant_interval
+                                        )
+                                        self.log.debug(
+                                            f"User {credit_user.name} ({credits.name}): {prev_balance} -> {credits.balance} "
+                                            f"(+{gained}, cap {credits.cap})",
+                                            extra={
+                                                "action": "creditsgained",
+                                                "username": credit_user.name,
+                                                "creditsname": credits.name,
+                                            },
+                                        )
                             if updated:
                                 self.parent.db.commit()
 
