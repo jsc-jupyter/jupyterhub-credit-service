@@ -45,19 +45,34 @@ class MixinAuthenticator(GenericOAuthenticator, jupyterhub_credit_service.Credit
 
 c.JupyterHub.authenticator_class = MixinAuthenticator
 
-# Different users may get different amount of credits
-def user_cap(username, user_groups=[], is_admin=False):
-    if username.endswith("mycompany.org"):
-        return 1000
-    elif username.endswith("googlemail.com") or username.endswith("gmail.com"):
-        return 30
-    return 100
+# Different users may get different amount of credits or are part of different projects
+async def credits_user(user_name, user_groups, is_admin, auth_model):
+    ret = {
+        "name": "default",
+        "cap": 100,
+        "grant_value": 10,
+        "grant_interval": 600,
+        "project": None,
+    }
+    if is_admin:
+        ret["project"] = {
+            "name": "admin",
+            "cap": 1000,
+            "grant_value": 100,
+            "grant_interval": 300
+        }
+    elif "community1" in user_groups:
+        ret["project"] = {
+            "name": "community1",
+            "cap": 100,
+            "grant_value": 10,
+            "grant_interval": 300
+        }
+    return ret
 
-c.MixinAuthenticator.credits_user_cap = user_cap  # may be a callable or integer
-c.MixinAuthenticator.credits_user_grant_value = 5 # may be a callable or integer
-c.MixinAuthenticator.credits_user_grant_interval = 600 # Gain 5 credits every 10 minutes, may be a callable or integer
+c.MixinAuthenticator.credits_user = credits_user  # may be a callable or a dict
 
-c.MixinAuthenticator.userinfo_url = ... # your normal configuration
+c.MixinAuthenticator.userinfo_url = ... # your normal authenticator configuration
 
 
 # Configure Spawner
@@ -75,7 +90,7 @@ def get_billing_value(spawner):
 
 c.JupyterHub.spawner_class = KubeSpawner
 c.KubeSpawner.billing_value = get_billing_value # may be a callable or integer
-c.KubeSpawner.billing_interval = 600 # Pay credits depending on gpus usage every 10 minutes, may be a callable or integer
+c.KubeSpawner.billing_interval = 600 # may be a callable or integer
 
 # Show JupyterHub Credits in the Header in your frontend
 c.JupyterHub.template_paths = jupyterhub_credit_service.template_paths
