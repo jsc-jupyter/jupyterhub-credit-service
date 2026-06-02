@@ -4,77 +4,85 @@ This module forms the core of the **JupyterHub Credit Service**. At every interv
 
 ## Configure Credits per User
 
-A user's credit configuration is defined by three main parameters:
+A user's credit configuration is defined by a few main parameters:
 
-- **credits_user_cap**: The maximum number of credits a user can hold. Default: 100
-- **credits_user_grant_value**: The number of credits granted to a user every `credits_user_grant_interval` seconds. Default: 10
-- **credits_user_grant_interval**: The time interval, in seconds, at which users receive their `credits_user_grant_value` credits. Default: 600
-
-Each of these parameters can be specified either as an integer value or as a callable function that dynamically determines the configuration.
-
+- **name**: Name of the credits configuration.
+- **cap**: The maximum number of credits a user can hold. Default: 100
+- **grant_value**: The number of credits granted to a user every `credits_user_grant_interval` seconds. Default: 10
+- **grant_interval**: The time interval, in seconds, at which users receive their `credits_user_grant_value` credits. Default: 600
+  
+The JupyterHub Credit Service also supports shared credit pools through **projects**. Projects represent groups or communities that share a collective credit balance. When a user belongs to a project, their usage draws from the project’s credits first, before using their individual credit balance.  
+  
+Furthermore, administrators can configure multiple credit configurations based on the user_options. E.g. if the user starts a Jupyter Server on system A it uses a different pool than starting on system B.
+  
+Simple example with projects:  
+  
 ```python
-async def user_cap(user_name, user_groups, is_admin):
-    if user_name == "max":
-        return 150
-    return 100
-
-def user_grant_value(user_name, user_groups, is_admin):
-    if is_admin:
-        return 20
-    return 10
-
-def user_grant_interval(user_name, user_groups, is_admin):
-    if "premium" in user_groups:
-        return 300  # grant every 5 minutes
-    return 600  # default 10 minutes
-
-# Use callable functions (async or sync), or integer values
-c.CreditsAuthenticator.credits_user_cap = user_cap
-c.CreditsAuthenticator.credits_user_grant_value = user_grant_value
-c.CreditsAuthenticator.credits_user_grant_interval = user_grant_interval
-```
-
-## Configure Projects
-
-The JupyterHub Credit Service also supports shared credit pools through **projects**. Projects represent groups or communities that share a collective credit balance. When a user belongs to a project, their usage draws from the project’s credits first, before using their individual credit balance.
-
-A project requires a **name**, along with the same core parameters as the user credit configuration:  
-- **cap**  
-- **grant_value**  
-- **grant_interval**
-
-> Each user can belong to **only one** project.  
-> To exclude a user from any project, return **None** or omit the `credits_user_project` configuration entirely.
-
-To configure projects use these parameters:
-- **credits_available_projects**: Define a list of available projects a user can be part of. Default: []
-- **credits_user_project**: Callable to define a name of a project a user is part of. Default: None
-
-```python
-
-async def available_projects():
-    return [{
-        "name": "community1",
-        "cap": 1000,
-        "grant_value": 20,
-        "grant_interval": 600,
-    },
-    {
-        "name": "community2",
-        "cap": 500,
+async def credits_user(user_name, user_groups, is_admin, auth_model):
+    ret = {
+        "name": "default",
+        "cap": 100,
         "grant_value": 10,
         "grant_interval": 600,
-    }]
+        "project": None,
+    }
+    if is_admin:
+        ret["project"] = {
+            "name": "admin",
+            "cap": 1000,
+            "grant_value": 100,
+            "grant_interval": 300
+        }
+    elif "community1" in user_groups:
+        ret["project"] = {
+            "name": "community1",
+            "cap": 100,
+            "grant_value": 10,
+            "grant_interval": 300
+        }
+    return ret
 
-c.CreditsAuthenticator.credits_available_projects = available_projects # List of dicts or a (async) callable
+# Use callable functions (async or sync), dict or list of dicts
+c.CreditsAuthenticator.credits_user = credits_user
+```
+  
+Credits based on user_options:  
+  
+```python
+async def credits_user(user_name, user_groups, is_admin, auth_model):
+    ret = [
+        {
+            "name": "SystemA",
+            "cap": 300,
+            "grant_value": 10,
+            "grant_interval": 600,
+            "project": None,
+            "user_options": {
+                "system": "A"
+            }
+        },
+        {
+            "name": "SystemB",
+            "cap": 200,
+            "grant_value": 10,
+            "grant_interval": 600,
+            "project": None,
+            "user_options": {
+                "system": "B"
+            }
+        },
+        {
+            "name": "Fallback / default",
+            "cap": 200,
+            "grant_value": 10,
+            "grant_interval": 600,
+            "project": None
+        }
+    ]
+    return ret
 
-def credits_user_project(user_name, user_groups, is_admin):
-    if "community1" in user_groups:
-        return "community1"
-    return None
-
-c.CreditsAuthenticator.credits_user_project = credits_user_project # Must be a callable
-
+# Use callable functions (async or sync), dict or list of dicts
+c.CreditsAuthenticator.credits_user = credits_user
 ```
 
 ## Other Configurations
@@ -88,6 +96,8 @@ c.CreditsAuthenticator.credits_user_project = credits_user_project # Must be a c
 - **credits_task_post_hook**: An optional callback function executed after each **billing interval**.  
   *Default: None*
 
+- **credits_grant_sync_time**: Optional timestamp to ensure users gain credits at this timestamp (e.g. each morning at 7AM, so users don't start the day without credits). **Format: "HH:MM" (24-hour format, UTC)**
+  *Default: None*
 
 ## Implementation / Credit Logic
 

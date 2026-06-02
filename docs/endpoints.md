@@ -16,7 +16,7 @@ This endpoint returns the current credit status of the logged-in user, including
 
 ## Admin Endpoint
 
-**Path:** `/hub/api/credits/user/<user_name>` / `/hub/api/credits/project/<project_name>`  
+**Path:** `/hub/api/credits/user/<user_name>/<credit_name>` / `/hub/api/credits/project/<project_name>`  
 **Access:** Administrators only  
 
 This endpoint allows administrators to adjust user or project credit configurations at runtime.  
@@ -38,7 +38,7 @@ If a user or project has exhausted their credits (for example, during a workshop
 # Update user credit balance
 curl -X POST -d '{"balance": 100}' \
      -H "Authorization: token $ADMIN_TOKEN" \
-     https://_myhub_.com/hub/api/credits/user/user_name
+     https://_myhub_.com/hub/api/credits/user/user_name/credit_name
 
 # Update project credit balance
 curl -X POST -d '{"balance": 1000, "cap": 1100}' \
