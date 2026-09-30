@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, Unicode
 from sqlalchemy.ext.mutable import MutableDict
@@ -19,7 +19,7 @@ class CreditsProject(Base):
     cap = Column(Integer, default=100)
     grant_value = Column(Integer, default=5)
     grant_interval = Column(Integer, default=300)
-    grant_last_update = Column(DateTime, default=datetime.now)
+    grant_last_update = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     user_options = Column(MutableDict.as_mutable(JSON), default=dict, nullable=True)
 
     # One project - many user values
@@ -61,7 +61,7 @@ class CreditsUserValues(Base):
     cap = Column(Integer, default=100)
     grant_value = Column(Integer, default=5)
     grant_interval = Column(Integer, default=300)
-    grant_last_update = Column(DateTime, default=datetime.now)
+    grant_last_update = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     user_options = Column(MutableDict.as_mutable(JSON), default=dict, nullable=True)
 
     # Foreign keys
