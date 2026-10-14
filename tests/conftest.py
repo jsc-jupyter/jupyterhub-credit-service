@@ -127,19 +127,18 @@ async def app(request, io_loop, ssl_tmpdir):
     mocked_app.authenticator_class = MockCreditsAuthenticator
     mocked_app.spawner_class = MockCreditsSpawner
 
-    def fin():
+    await mocked_app.initialize([])
+    await mocked_app.start()
+    try:
+        yield mocked_app
+    finally:
         # disconnect logging during cleanup because pytest closes captured FDs prematurely
         mocked_app.log.handlers = []
         MockHub.clear_instance()
         try:
-            mocked_app.stop()
+            await mocked_app.stop()
         except Exception as e:
             print(f"Error stopping Hub: {e}", file=sys.stderr)
-
-    request.addfinalizer(fin)
-    await mocked_app.initialize([])
-    await mocked_app.start()
-    return mocked_app
 
 
 @fixture
