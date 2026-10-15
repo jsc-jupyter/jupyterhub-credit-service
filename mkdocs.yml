@@ -1,6 +1,7 @@
 site_name: JupyterHub Credit Service
 site_description: JupyterHub Credit Service Documentation
 site_author: Tim Kreuzer
+site_url: https://jsc-jupyter.github.io/jupyterhub-credit-service/
 repo_url: https://github.com/jsc-jupyter/jupyterhub-credit-service
 theme:
   name: material
