@@ -11,11 +11,13 @@ c.JupyterHub.template_paths = template_path
 This configuration automatically inserts the user's credit balance into the JupyterHub header.
 Whenever credits are updated on the server, the displayed balance updates in real time - no manual page refresh required.
 
-<div style="text-align: center;">
-  <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_home.png" alt="JupyterHub" style="width: 100%;">
+<div style="text-align: center;" markdown="1">
+![JupyterHub](images/image_home.png){ style="width: 100%;" }
 </div>
 
-<details><summary>Click here to see the frontend changes of JupyterHub
+<details markdown="1">
+<summary>Click here to see the frontend changes of JupyterHub</summary>
+
 ```diff
 diff -Naur jupyterhub/page.html jupyterhub_credit_service/page.html
 --- jupyterhub/page.html        2025-10-20 09:03:45.337461368 +0200
@@ -82,4 +84,5 @@ diff -Naur jupyterhub/page.html jupyterhub_credit_service/page.html
                    {% block theme_toggle %}
                      <button class="btn btn-sm"
 ```
-</summary></details>
+
+</details>

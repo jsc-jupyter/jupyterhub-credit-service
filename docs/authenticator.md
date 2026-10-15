@@ -7,9 +7,11 @@ This module forms the core of the **JupyterHub Credit Service**. At every interv
 A user's credit configuration is defined by a few main parameters:
 
 - **name**: Name of the credits configuration.
-- **cap**: The maximum number of credits a user can hold. Default: 100
-- **grant_value**: The number of credits granted to a user every `credits_user_grant_interval` seconds. Default: 10
-- **grant_interval**: The time interval, in seconds, at which users receive their `credits_user_grant_value` credits. Default: 600
+- **cap**: The maximum number of credits a user can hold.
+- **grant_value**: The number of credits granted to a user every `grant_interval` seconds.
+- **grant_interval**: The time interval, in seconds, at which users receive their `grant_value` credits.
+
+`name`, `cap`, `grant_value` and `grant_interval` are required and have no defaults. A missing key raises an error.
   
 The JupyterHub Credit Service also supports shared credit pools through **projects**. Projects represent groups or communities that share a collective credit balance. When a user belongs to a project, their usage draws from the project’s credits first, before using their individual credit balance.  
   
@@ -47,6 +49,8 @@ c.CreditsAuthenticator.credits_user = credits_user
 ```
   
 Credits based on user_options:  
+
+When a list is returned, the first entry whose `user_options` match the spawner is used. An entry without `user_options` matches every spawner, so place such a fallback entry last.
   
 ```python
 async def credits_user(authenticator, user_name, user_groups, is_admin, auth_state):
