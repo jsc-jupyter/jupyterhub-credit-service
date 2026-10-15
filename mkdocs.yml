@@ -75,11 +75,6 @@ markdown_extensions:
   - pymdownx.mark
   - attr_list
 
-extra_css:
-  - css/style.css
-  - css/neoteroi-cards.css
-  - css/extra.css
-
 extra:
   logo: "images/logo.svg"
   generator: false

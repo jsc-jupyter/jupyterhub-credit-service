@@ -33,7 +33,7 @@ pip install jupyterhub-credit-service
 ## Usage
 
 Example `jupyterhub_config.py` configuration:  
-```jupyterhub_config.py
+```python
 import jupyterhub_credit_service
 
 # Configure Authenticator
@@ -45,7 +45,7 @@ class MixinAuthenticator(GenericOAuthenticator, jupyterhub_credit_service.Credit
 c.JupyterHub.authenticator_class = MixinAuthenticator
 
 # Different users may get different amount of credits
-async def credits_user(user_name, user_groups, is_admin, auth_model):
+async def credits_user(authenticator, user_name, user_groups, is_admin, auth_state):
     ret = {
         "name": "default",
         "cap": 100,

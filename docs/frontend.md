@@ -15,8 +15,8 @@ Whenever credits are updated on the server, the displayed balance updates in rea
   <img src="https://jsc-jupyter.github.io/jupyterhub-credit-service/images/image_home.png" alt="JupyterHub" style="width: 100%;">
 </div>
 
-<summary>Click here to see the frontend changes of JupyterHub<details>
-```bash
+<details><summary>Click here to see the frontend changes of JupyterHub
+```diff
 diff -Naur jupyterhub/page.html jupyterhub_credit_service/page.html
 --- jupyterhub/page.html        2025-10-20 09:03:45.337461368 +0200
 +++ jupyterhub_credit_service/page.html 2025-10-20 09:03:30.204356558 +0200
@@ -82,4 +82,4 @@ diff -Naur jupyterhub/page.html jupyterhub_credit_service/page.html
                    {% block theme_toggle %}
                      <button class="btn btn-sm"
 ```
-</details></summary>
+</summary></details>

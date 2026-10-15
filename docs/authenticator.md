@@ -18,7 +18,7 @@ Furthermore, administrators can configure multiple credit configurations based o
 Simple example with projects:  
   
 ```python
-async def credits_user(user_name, user_groups, is_admin, auth_model):
+async def credits_user(authenticator, user_name, user_groups, is_admin, auth_state):
     ret = {
         "name": "default",
         "cap": 100,
@@ -49,7 +49,7 @@ c.CreditsAuthenticator.credits_user = credits_user
 Credits based on user_options:  
   
 ```python
-async def credits_user(user_name, user_groups, is_admin, auth_model):
+async def credits_user(authenticator, user_name, user_groups, is_admin, auth_state):
     ret = [
         {
             "name": "SystemA",
@@ -93,7 +93,7 @@ c.CreditsAuthenticator.credits_user = credits_user
 - **credits_task_interval**: Defines the interval, in seconds, at which the background credit management task executes.  
   *Default: 60*
 
-- **credits_task_post_hook**: An optional callback function executed after each **billing interval**.  
+- **credits_task_post_hook**: An optional callback function executed after each **credits task interval**.  
   *Default: None*
 
 - **credits_grant_sync_time**: Optional timestamp to ensure users gain credits at this timestamp (e.g. each morning at 7AM, so users don't start the day without credits). **Format: "HH:MM" (24-hour format, UTC)**
