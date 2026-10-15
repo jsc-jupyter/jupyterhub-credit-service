@@ -327,7 +327,7 @@ class CreditsUserAPIHandler(APIHandler):
         user = self.find_user(user_name)
         if not user:
             raise HTTPError(404, "User not found")
-        data = self.get_json_body()
+        data = self.get_json_body() or {}
         credits_user = CreditsUser.get_user(user.authenticator.parent.db, user.name)
         if not credits_user:
             # Create entry for user with default values
@@ -353,24 +353,21 @@ class CreditsUserAPIHandler(APIHandler):
                 break
         if not credits_user_values:
             raise HTTPError(404, f"Credit entry '{credit_name}' not found for user")
-        if balance and cap and balance > cap:
-            raise HTTPError(
-                400, f"Balance can't be bigger than cap ({balance} / {cap})"
-            )
-        if balance and balance > credits_user_values.cap:
-            raise HTTPError(
-                400,
-                f"Balance can't be bigger than cap ({balance} / {credits_user_values.cap})",
-            )
-        if balance and balance < 0:
+        effective_cap = cap if cap is not None else credits_user_values.cap
+        if balance is not None and balance < 0:
             raise HTTPError(400, "Balance can't be negative")
-        if balance:
+        if balance is not None and balance > effective_cap:
+            raise HTTPError(
+                400, f"Balance can't be bigger than cap ({balance} / {effective_cap})"
+            )
+        if balance is not None:
             credits_user_values.balance = balance
-        if cap:
+        if cap is not None:
             credits_user_values.cap = cap
-        if grant_value:
+            credits_user_values.balance = min(credits_user_values.balance, cap)
+        if grant_value is not None:
             credits_user_values.grant_value = grant_value
-        if grant_interval:
+        if grant_interval is not None:
             credits_user_values.grant_interval = grant_interval
         if project and credits_user_values.project:
             prev_project_balance = credits_user_values.project.balance
@@ -378,19 +375,22 @@ class CreditsUserAPIHandler(APIHandler):
             prev_project_grant_value = credits_user_values.project.grant_value
             prev_project_grant_interval = credits_user_values.project.grant_interval
             proj_updated = False
-            if project_cap and prev_project_cap != project_cap:
+            if project_cap is not None and prev_project_cap != project_cap:
                 proj_updated = True
                 credits_user_values.project.cap = project_cap
-            if project_balance and prev_project_balance != project_balance:
+            if project_balance is not None and prev_project_balance != project_balance:
                 proj_updated = True
                 credits_user_values.project.balance = project_balance
             if credits_user_values.project.cap < credits_user_values.project.balance:
                 credits_user_values.project.balance = credits_user_values.project.cap
-            if project_grant_value and prev_project_grant_value != project_grant_value:
+            if (
+                project_grant_value is not None
+                and prev_project_grant_value != project_grant_value
+            ):
                 proj_updated = True
                 credits_user_values.project.grant_value = project_grant_value
             if (
-                project_grant_interval
+                project_grant_interval is not None
                 and prev_project_grant_interval != project_grant_interval
             ):
                 proj_updated = True
@@ -399,13 +399,9 @@ class CreditsUserAPIHandler(APIHandler):
                 user.authenticator.parent.db.add(credits_user_values.project)
                 user.authenticator.parent.db.commit()
         elif project and not credits_user_values.project:
-            _project = user.authenticator.credits_validate_and_update_project(
-                credits_user_values
-            )
+            _project = user.authenticator.credits_validate_and_update_project(project)
             if not _project:
-                self.log.error(
-                    f"Failed to validate and update project: {credits_user_values}"
-                )
+                self.log.error(f"Failed to validate and update project: {project}")
                 self.set_status(400)
                 return
             else:
@@ -414,7 +410,7 @@ class CreditsUserAPIHandler(APIHandler):
                 user.authenticator.parent.db.add(orm_project)
                 credits_user_values.project = orm_project
                 user.authenticator.parent.db.commit()
-        elif not project and credits_user_values.project:
+        elif "project" in data and not project and credits_user_values.project:
             user.authenticator.parent.db.delete(credits_user_values.project)
             credits_user_values.project = None
 
@@ -426,7 +422,7 @@ class CreditsUserAPIHandler(APIHandler):
 class CreditsProjectAPIHandler(APIHandler):
     @needs_scope("admin:users")
     async def post(self, project_name):
-        data = self.get_json_body()
+        data = self.get_json_body() or {}
         balance = data.get("balance", None)
         cap = data.get("cap", None)
         grant_value = data.get("grant_value", None)
@@ -439,23 +435,21 @@ class CreditsProjectAPIHandler(APIHandler):
         if not project:
             raise HTTPError(404, f"Unknown project {project_name}.")
 
-        if balance and cap and balance > cap:
-            raise HTTPError(
-                400, f"Balance can't be bigger than cap ({balance} / {cap})"
-            )
-        if balance and balance > project.cap:
-            raise HTTPError(
-                400, f"Balance can't be bigger than cap ({balance} / {project.cap})"
-            )
-        if balance and balance < 0:
+        effective_cap = cap if cap is not None else project.cap
+        if balance is not None and balance < 0:
             raise HTTPError(400, "Balance can't be negative")
-        if balance:
+        if balance is not None and balance > effective_cap:
+            raise HTTPError(
+                400, f"Balance can't be bigger than cap ({balance} / {effective_cap})"
+            )
+        if balance is not None:
             project.balance = balance
-        if cap:
+        if cap is not None:
             project.cap = cap
-        if grant_value:
+            project.balance = min(project.balance, cap)
+        if grant_value is not None:
             project.grant_value = grant_value
-        if grant_interval:
+        if grant_interval is not None:
             project.grant_interval = grant_interval
         self.current_user.authenticator.parent.db.commit()
         self.set_status(200)
