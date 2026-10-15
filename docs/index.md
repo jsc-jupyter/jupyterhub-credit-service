@@ -70,7 +70,7 @@ async def credits_user(user_name, user_groups, is_admin, auth_model):
     return ret
 
 # Use callable functions (async or sync), dict or list of dicts
-c.CreditsAuthenticator.credits_user = credits_user
+c.MixinAuthenticator.credits_user = credits_user
 
 c.MixinAuthenticator.userinfo_url = ... # your normal configuration
 
