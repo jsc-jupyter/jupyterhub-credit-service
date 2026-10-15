@@ -170,7 +170,7 @@ class CreditsAuthenticator(Authenticator):
 
         Example::
 
-            async def my_task_hook(credits_manager):
+            async def my_task_hook():
                 print("Credits task finished")
 
             c.CreditsAuthenticator.credits_task_post_hook = my_task_hook
@@ -218,14 +218,14 @@ class CreditsAuthenticator(Authenticator):
         if not user_options_configured:
             return True
         for key, value in user_options_configured.items():
-            uo_value = user_options_spawner[key]
-            if type(uo_value) == list and len(uo_value) == 1:
-                uo_value = uo_value[0]
             if key not in user_options_spawner.keys():
                 self.log.debug(
                     f"Key {key} not found in spawner user_options {user_options_spawner}. Return False."
                 )
                 return False
+            uo_value = user_options_spawner[key]
+            if type(uo_value) == list and len(uo_value) == 1:
+                uo_value = uo_value[0]
             if type(value) == list:
                 self.log.debug(
                     f"Check if spawner user_option {key} value {uo_value} is in configured list {value}"
