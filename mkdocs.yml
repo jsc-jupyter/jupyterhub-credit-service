@@ -4,8 +4,9 @@ site_author: Tim Kreuzer
 repo_url: https://github.com/jsc-jupyter/jupyterhub-credit-service
 theme:
   name: material
+  variant: classic
   features:
-    - nagivation.tabs
+    - navigation.tabs
     - navigation.sections
     - navigation.collapse
     - navigation.footer
