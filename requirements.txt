@@ -1,3 +1,3 @@
 zensical
-cairosvg==2.8.2
+cairosvg==2.9.1
 neoteroi-mkdocs==1.1.3
