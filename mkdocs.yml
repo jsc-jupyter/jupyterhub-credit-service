@@ -28,10 +28,14 @@ theme:
   # custom_dir: docs/custom
   palette:
     - scheme: default
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/lightbulb
         name: Switch to dark mode
     - scheme: slate
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/lightbulb-outline
         name: Switch to light mode
