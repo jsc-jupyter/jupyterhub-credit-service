@@ -111,7 +111,7 @@
         creditsEvtSource = new EventSource(sseUrl);
         creditsEvtSource.onmessage = (e) => {
           try {
-            const jsonData = JSON.parse(event.data);
+            const jsonData = JSON.parse(e.data);
             var htmlText = `Credits:`;
             if (Array.isArray(jsonData)) {
               jsonData.forEach((item) => {
@@ -223,7 +223,7 @@
                 <li class="nav-item">
                   <span id="credits-user"
                         class="me-2"
-                        style="display: flex; align-items: center;"/>
+                        style="display: flex; align-items: center;"></span>
                 </li>
                 {% endif %}
                 <li class="nav-item">
